@@ -1,0 +1,91 @@
+import { API_BASE_URL } from '@/constants/config';
+import type {
+  AuthResponse,
+  LoginPayload,
+  OtpSentResponse,
+  SignupPayload,
+  VerifyOtpPayload,
+} from '@/types/auth';
+
+type ErrorBody = {
+  message?: string;
+  errors?: Record<string, string>;
+};
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(options.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new ApiError(
+      'Cannot reach the server. Is the backend running on port 8080?',
+      0
+    );
+  }
+
+  const text = await response.text();
+  let data: T | ErrorBody | null = null;
+  if (text) {
+    try {
+      data = JSON.parse(text) as T | ErrorBody;
+    } catch {
+      throw new ApiError('Unexpected server response', response.status);
+    }
+  }
+
+  if (!response.ok) {
+    const body = data as ErrorBody | null;
+    const fieldMessage = body?.errors
+      ? Object.values(body.errors).join('\n')
+      : undefined;
+    throw new ApiError(fieldMessage || body?.message || 'Request failed', response.status);
+  }
+
+  return data as T;
+}
+
+export function signup(payload: SignupPayload): Promise<OtpSentResponse> {
+  return request<OtpSentResponse>('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function verifyOtp(payload: VerifyOtpPayload): Promise<AuthResponse> {
+  return request<AuthResponse>('/api/auth/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resendOtp(email: string): Promise<OtpSentResponse> {
+  return request<OtpSentResponse>('/api/auth/resend-otp', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function login(payload: LoginPayload): Promise<AuthResponse> {
+  return request<AuthResponse>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}

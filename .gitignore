@@ -1,0 +1,26 @@
+# Node / React Native
+node_modules/
+.expo/
+*.log
+npm-debug.log*
+
+# Android / iOS build output
+*.apk
+*.ipa
+android/
+ios/
+
+# Backend build artifacts
+carpooling-backend/target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE / editor
+.vscode/
+.idea/
+*.iml
+.DS_Store
+
+# Local env
+.env.local
