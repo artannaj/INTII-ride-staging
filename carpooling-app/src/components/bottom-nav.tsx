@@ -1,11 +1,12 @@
 import {
-    Bookmark,
-    Home,
-    Mail,
-    MessageCircle,
-    User,
-    type LucideIcon,
+  Home,
+  Mail,
+  MessageCircle,
+  Bookmark,
+  User,
+  type LucideIcon,
 } from 'lucide-react-native';
+import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,45 +18,47 @@ type NavItem = {
   key: NavTab;
   label: string;
   Icon: LucideIcon;
+  path: string;
 };
 
 const ITEMS: NavItem[] = [
-  { key: 'home', label: 'Home', Icon: Home },
-  { key: 'inbox', label: 'Inbox', Icon: Mail },
-  { key: 'chat', label: 'Chat', Icon: MessageCircle },
-  { key: 'bookings', label: 'Bookings', Icon: Bookmark },
-  { key: 'account', label: 'Account', Icon: User },
+  { key: 'home', label: 'Home', Icon: Home, path: '/(app)' },
+  { key: 'inbox', label: 'Inbox', Icon: Mail, path: '/(app)/inbox' },
+  { key: 'chat', label: 'Chat', Icon: MessageCircle, path: '/(app)/chat' },
+  { key: 'bookings', label: 'Bookings', Icon: Bookmark, path: '/(app)/bookings' },
+  { key: 'account', label: 'Account', Icon: User, path: '/(app)/account' },
 ];
 
 type BottomNavProps = {
   active: NavTab;
-  onNavigate: (tab: NavTab) => void;
 };
 
-export function BottomNav({ active, onNavigate }: BottomNavProps) {
+export function BottomNav({ active }: BottomNavProps) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-      {ITEMS.map(({ key, label, Icon }) => {
+    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+      {ITEMS.map(({ key, label, Icon, path }) => {
         const isActive = key === active;
         return (
           <Pressable
             key={key}
-            onPress={() => onNavigate(key)}
-            style={[styles.item, isActive && styles.itemActive]}>
-            <Icon
-              size={22}
-              color={isActive ? Colors.light.primary : '#FFFFFFCC'}
-              strokeWidth={2.2}
-            />
-            <Text
-              style={[
-                styles.label,
-                isActive && styles.labelActive,
-              ]}>
-              {label}
-            </Text>
+            onPress={() => router.push(path as any)}
+            style={styles.item}>
+            <View style={[styles.iconWrap, isActive && styles.iconWrapActive]}>
+              <Icon
+                size={22}
+                color={isActive ? Colors.light.primary : '#FFFFFFCC'}
+                strokeWidth={2.2}
+              />
+              <Text
+                style={[
+                  styles.label,
+                  isActive && styles.labelActive,
+                ]}>
+                {label}
+              </Text>
+            </View>
           </Pressable>
         );
       })}
@@ -70,23 +73,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingTop: 8,
-    paddingHorizontal: 6,
   },
   item: {
     flex: 1,
     alignItems: 'center',
+  },
+  iconWrap: {
+    alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
-    gap: 2,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    gap: 4,
+    borderRadius: 12,
   },
-  itemActive: {
+  iconWrapActive: {
     backgroundColor: '#FFFFFF',
   },
   label: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#FFFFFFCC',
+    color: 'rgba(255, 255, 255, 0.7)',
   },
   labelActive: {
     color: Colors.light.primary,

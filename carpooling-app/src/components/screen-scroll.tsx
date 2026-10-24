@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Colors, Spacing } from '@/constants/theme';
 
@@ -22,7 +22,7 @@ export function ScreenScroll({ children }: ScreenScrollProps) {
 const styles = StyleSheet.create({
   scroll: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: '#EFEFEF', // Matches the gray background
   },
   content: {
     paddingHorizontal: Spacing.three,

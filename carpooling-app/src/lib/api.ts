@@ -407,3 +407,57 @@ export function generateReferralCode(token: string): Promise<ReferralSummary> {
     method: 'POST',
   }, token);
 }
+
+/* ==========================================================================
+   RIDES & BOOKINGS (Member 3)
+   ========================================================================== */
+
+export type Ride = {
+  id: number;
+  driverId: number;
+  origin: string;
+  destination: string;
+  departureTime: string;
+  price: number;
+  seatsAvailable: number;
+  note: string | null;
+  status: string;
+};
+
+export type Booking = {
+  id: number;
+  rideId: number;
+  passengerId: number;
+  seatsBooked: number;
+  totalPrice: number;
+  status: string;
+  createdAt: string;
+};
+
+export function searchRides(token: string, origin: string, destination: string): Promise<Ride[]> {
+  return request<Ride[]>(`/api/rides/search?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`, {}, token);
+}
+
+export function createRide(
+  token: string,
+  payload: { origin: string; destination: string; departureTime: string; price: number; seatsAvailable: number; note?: string }
+): Promise<Ride> {
+  return request<Ride>('/api/rides', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, token);
+}
+
+export function createBooking(
+  token: string,
+  payload: { rideId: number; seatsBooked: number }
+): Promise<Booking> {
+  return request<Booking>('/api/bookings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, token);
+}
+
+export function getMyBookings(token: string): Promise<Booking[]> {
+  return request<Booking[]>('/api/bookings/my-bookings', {}, token);
+}
