@@ -5,10 +5,9 @@ import {
 } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppHeader } from '@/components/app-header'; // <-- Use your perfect header
 import { Avatar, Badge, BottomNav, MenuRow, ScreenScroll, SectionGroup } from '@/components';
-import { ScreenHeader } from '@/components/screen-header';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { usePolling } from '@/hooks/use-polling';
@@ -25,7 +24,6 @@ export default function AccountScreen() {
     if (!token) return;
     const [wallet, count] = await Promise.all([
       getWallet(token).then((w) => w.balance).catch(() => null),
-      // Drivers see trips they drove, passengers see trips they took
       (isDriver
         ? getMyRides(token).then((r) => r.filter((x) => x.status === 'COMPLETED').length)
         : getMyBookings(token).then((b) => b.filter((x) => x.status === 'COMPLETED').length)
@@ -44,7 +42,6 @@ export default function AccountScreen() {
         router.replace('/(app)');
         return;
       }
-      // First-time drivers add their vehicle; returning drivers switch straight back
       const profile = await getDriverProfile(token);
       if (!profile.complete) {
         router.push('/(app)/driver/setup');
@@ -63,9 +60,9 @@ export default function AccountScreen() {
   const email = user?.email || '';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top',]}>
-      <StatusBar style="dark" />
-      <ScreenHeader title="Account" />
+    <View style={styles.safe}>
+      <StatusBar style="light" />
+      <AppHeader title="Account" />
 
       <ScreenScroll>
         <Pressable onPress={() => router.push('/(app)/edit')} style={styles.profileCard}>
@@ -136,7 +133,7 @@ export default function AccountScreen() {
       </ScreenScroll>
 
       <BottomNav active="account" />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -150,6 +147,7 @@ function Tile({ label, value, onPress }: { label: string; value: string; onPress
 }
 
 const styles = StyleSheet.create({
+  // Replaced SafeAreaView with View to fix the giant header issue
   safe: { flex: 1, backgroundColor: Colors.light.background },
   profileCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border, borderRadius: 14, padding: 14 },
   profileInfo: { flex: 1, minWidth: 0 },

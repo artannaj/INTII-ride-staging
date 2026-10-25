@@ -11,10 +11,9 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppHeader } from '@/components/app-header'; // <-- Use the perfect header
 import { Button, ScreenScroll, SectionGroup } from '@/components';
-import { ScreenHeader } from '@/components/screen-header';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import {
@@ -130,9 +129,9 @@ export default function SavedPlacesScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar style="dark" />
-      <ScreenHeader title="Saved places" showBack />
+    <View style={styles.safe}>
+      <StatusBar style="light" />
+      <AppHeader title="Saved places" />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -246,7 +245,7 @@ export default function SavedPlacesScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

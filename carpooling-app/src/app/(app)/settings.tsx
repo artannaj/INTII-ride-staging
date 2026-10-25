@@ -13,8 +13,8 @@ import {
 } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppHeader } from '@/components/app-header'; // <-- Use the perfect header
 import {
     Badge,
     MenuRow,
@@ -22,7 +22,6 @@ import {
     SectionGroup,
     Toggle,
 } from '@/components';
-import { ScreenHeader } from '@/components/screen-header';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import {
@@ -118,9 +117,9 @@ export default function SettingsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar style="dark" />
-      <ScreenHeader title="Settings" showBack />
+    <View style={styles.safe}>
+      <StatusBar style="light" />
+      <AppHeader title="Settings" />
 
       <ScreenScroll>
         {/* NOTIFICATIONS */}
@@ -226,7 +225,7 @@ export default function SettingsScreen() {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScreenScroll>
-    </SafeAreaView>
+    </View>
   );
 }
 

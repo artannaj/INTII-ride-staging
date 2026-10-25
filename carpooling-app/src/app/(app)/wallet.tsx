@@ -18,8 +18,8 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppHeader } from '@/components/app-header'; // <-- Use the perfect header
 import {
     Badge,
     Button,
@@ -28,7 +28,6 @@ import {
     SectionGroup,
     Toggle,
 } from '@/components';
-import { ScreenHeader } from '@/components/screen-header';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import {
@@ -186,9 +185,9 @@ export default function WalletScreen() {
   const balance = wallet?.balance ?? 0;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar style="dark" />
-      <ScreenHeader title="Payment" showBack />
+    <View style={styles.safe}>
+      <StatusBar style="light" />
+      <AppHeader title="Payment" />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -413,7 +412,7 @@ export default function WalletScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

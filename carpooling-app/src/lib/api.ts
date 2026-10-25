@@ -432,7 +432,6 @@ export type Ride = {
   seatsAvailable: number;
   note: string | null;
   status: RideStatus;
-  /** Only set on the driver's own rides (GET /api/rides/mine). */
   pendingRequests: number | null;
 };
 
@@ -443,7 +442,6 @@ export type CreateRidePayload = {
   originLng?: number;
   destinationLat?: number;
   destinationLng?: number;
-  /** Local time without offset, e.g. 2026-10-25T14:30:00 (backend uses LocalDateTime). */
   departureTime: string;
   price: number;
   seatsAvailable: number;
@@ -489,6 +487,11 @@ export function cancelRide(token: string, rideId: number): Promise<Ride> {
   return request<Ride>(`/api/rides/${rideId}/cancel`, { method: 'POST' }, token);
 }
 
+// ✅ ADDED THIS SO THE DETAILS SCREEN WORKS
+export function getRideById(token: string, rideId: number): Promise<Ride> {
+  return request<Ride>(`/api/rides/${rideId}`, {}, token);
+}
+
 /* ==========================================================================
    LIVE TRACKING
    ========================================================================== */
@@ -503,7 +506,6 @@ export type Tracking = {
   originLng: number | null;
   destinationLat: number | null;
   destinationLng: number | null;
-  /** Null until the trip starts and the driver's phone sends its first fix. */
   currentLat: number | null;
   currentLng: number | null;
   secondsSinceUpdate: number | null;
@@ -542,7 +544,6 @@ export type Booking = {
   driverName: string | null;
   vehicle: string | null;
   passengerName: string | null;
-  /** Shared only once the booking is CONFIRMED. */
   driverPhone: string | null;
   passengerPhone: string | null;
 };
@@ -636,7 +637,6 @@ export function getDriverProfile(token: string): Promise<DriverProfile> {
   return request<DriverProfile>('/api/users/driver-profile', {}, token);
 }
 
-/** Saves vehicle details and switches the account to DRIVER. */
 export function saveDriverProfile(
   token: string,
   payload: { vehicleModel: string; vehicleColor: string; vehiclePlate: string }

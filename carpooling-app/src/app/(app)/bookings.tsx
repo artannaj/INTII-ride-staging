@@ -1,157 +1,170 @@
-import { router } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Circle, MapPin, Navigation } from 'lucide-react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 
-import { AppHeader } from '@/components/app-header';
-import { BottomNav } from '@/components/bottom-nav';
+import { AppHeader } from '@/components/app-header'; // <-- Use the perfect header
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
-import { usePolling } from '@/hooks/use-polling';
-import { ApiError, getMyBookings, type Booking, type BookingStatus } from '@/lib/api';
-import { BOOKING_STATUS, formatDay, formatTime } from '@/lib/status';
+import { getMyBookings, type Booking, type BookingStatus } from '@/lib/api';
 
-const TABS: { label: string; statuses: BookingStatus[] | null }[] = [
-  { label: 'All', statuses: null },
-  { label: 'Pending', statuses: ['PENDING'] },
-  { label: 'Confirmed', statuses: ['CONFIRMED'] },
-  { label: 'Completed', statuses: ['COMPLETED'] },
-  { label: 'Cancelled', statuses: ['CANCELLED', 'REJECTED'] },
-];
+const TABS = ['All', 'Pending', 'Confirmed', 'Completed', 'Canceled'];
 
-export default function MyBookingsScreen() {
+export default function BookingsScreen() {
   const { token } = useAuth();
-  const [bookings, setBookings] = useState<Booking[] | null>(null);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('All');
-  const [error, setError] = useState<string | null>(null);
 
-  // Refresh while visible so "Pending" flips to "Confirmed" when the driver accepts
-  usePolling(async () => {
-    if (!token) return;
-    try {
-      setBookings(await getMyBookings(token));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load bookings.');
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      setLoading(true);
+      getMyBookings(token)
+        .then((data: Booking[]) => setBookings(data))
+        .catch((err: any) => console.log('Error fetching bookings:', err))
+        .finally(() => setLoading(false));
+    }, [token])
+  );
+
+  const filteredBookings = bookings.filter(b => {
+    if (activeTab === 'All') return true;
+    return b.status.toUpperCase() === activeTab.toUpperCase();
+  });
+
+  const getStatusColor = (status: BookingStatus) => {
+    switch (status) {
+      case 'PENDING': return '#D97706'; // Orange
+      case 'CONFIRMED': return '#10B981'; // Green
+      case 'COMPLETED': return '#6B7280'; // Grey
+      case 'CANCELLED': return '#EF4444'; // Red
+      case 'REJECTED': return '#EF4444'; // Red
+      default: return '#6B7280';
     }
-  }, 15000);
+  };
 
-  const tab = TABS.find((t) => t.label === activeTab)!;
-  const filteredBookings = (bookings ?? []).filter((b) => !tab.statuses || tab.statuses.includes(b.status));
+  const renderBooking = ({ item }: { item: Booking }) => {
+    const date = item.departureTime ? new Date(item.departureTime) : new Date();
+    const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateString = date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+
+    return (
+      <View style={styles.card}>
+        {/* Header Row */}
+        <View style={styles.cardHeader}>
+          <Text style={styles.driverName}>{item.driverName || 'Driver'}</Text>
+          <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+            {item.status.charAt(0) + item.status.slice(1).toLowerCase()}
+          </Text>
+        </View>
+
+        {/* Time Row */}
+        <View style={styles.timeRow}>
+          <Text style={styles.timeText}>{timeString}</Text>
+          <Text style={styles.dateSeatsText}>{dateString} · {item.seatsBooked} seat</Text>
+        </View>
+
+        {/* Route Row */}
+        <View style={styles.routeContainer}>
+          <View style={styles.routeLine} />
+          <View style={styles.routeItem}>
+            <View style={styles.dotStart} />
+            <Text style={styles.routeText} numberOfLines={1}>{item.origin || 'Origin'}</Text>
+          </View>
+          <View style={styles.routeItem}>
+            <View style={styles.dotEnd} />
+            <Text style={styles.routeText} numberOfLines={1}>{item.destination || 'Destination'}</Text>
+          </View>
+        </View>
+
+        {/* Footer Actions */}
+        <View style={styles.footerRow}>
+          <Pressable 
+            style={styles.detailsBtn}
+            onPress={() => router.push({ pathname: '/(app)/ride-details', params: { rideId: item.rideId } })}
+          >
+            <Text style={styles.detailsBtnText}>View Details</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  };
 
   return (
-    <View style={styles.safe}>
-      <StatusBar style="light" />
+    <View style={styles.root}>
+      {/* Use the perfect AppHeader instead of the manual red view */}
       <AppHeader title="My Bookings" />
 
-      <View style={styles.tabBar}>
-        {TABS.map(({ label }) => (
-          <Pressable
-            key={label}
-            onPress={() => setActiveTab(label)}
-            style={[styles.tabItem, activeTab === label && styles.tabItemActive]}
-          >
-            <Text style={[styles.tabText, activeTab === label && styles.tabTextActive]}>
-              {label}
-            </Text>
-          </Pressable>
-        ))}
+      {/* Tabs */}
+      <View style={styles.tabsWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContainer}>
+          {TABS.map((tab) => (
+            <Pressable 
+              key={tab} 
+              style={[styles.tabItem, activeTab === tab && styles.tabItemActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        {bookings && filteredBookings.length === 0 ? (
-          <Text style={styles.emptyText}>No bookings found.</Text>
-        ) : (
-          filteredBookings.map((booking) => {
-            const status = BOOKING_STATUS[booking.status];
-            const live = booking.status === 'CONFIRMED' && booking.rideStatus === 'IN_PROGRESS';
-            return (
-              <Pressable
-                key={booking.id}
-                style={styles.card}
-                onPress={() => router.push({ pathname: '/(app)/booking-details', params: { bookingId: booking.id } })}
-              >
-                <View style={styles.cardHeader}>
-                  <Text style={styles.driverName}>{booking.driverName ?? 'Driver'}</Text>
-                  <Text style={[styles.statusText, { color: live ? Colors.light.primary : status.color }]}>
-                    {live ? 'On the way' : status.label}
-                  </Text>
-                </View>
-
-                <Text style={styles.time}>{formatTime(booking.departureTime)}</Text>
-                <Text style={styles.dateText}>
-                  {formatDay(booking.departureTime)} · {booking.seatsBooked} seat{booking.seatsBooked === 1 ? '' : 's'} · RM {booking.totalPrice.toFixed(2)}
-                </Text>
-
-                <View style={styles.routeWrap}>
-                  <View style={styles.routeRow}>
-                    <Circle size={10} color={Colors.light.text} strokeWidth={3} />
-                    <Text style={styles.routeText}>{booking.origin}</Text>
-                  </View>
-                  <View style={styles.routeLine} />
-                  <View style={styles.routeRow}>
-                    <MapPin size={12} color={Colors.light.primary} strokeWidth={2.5} />
-                    <Text style={styles.routeText}>{booking.destination}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.cardFooter}>
-                  {live ? (
-                    <Pressable
-                      style={styles.trackBtn}
-                      onPress={() =>
-                        router.push({
-                          pathname: '/(app)/tracking',
-                          params: { rideId: booking.rideId, bookingId: booking.id },
-                        })
-                      }
-                    >
-                      <Navigation size={14} color="#FFFFFF" />
-                      <Text style={styles.trackText}>Track</Text>
-                    </Pressable>
-                  ) : null}
-                  <View style={styles.detailsBtn}>
-                    <Text style={styles.detailsText}>View Details</Text>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })
-        )}
-      </ScrollView>
-
-      <BottomNav active="bookings" />
+      {/* List */}
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={Colors.light.primary} />
+        </View>
+      ) : filteredBookings.length === 0 ? (
+        <View style={styles.center}>
+          <Text style={styles.emptyText}>No {activeTab.toLowerCase()} bookings.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredBookings}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.list}
+          renderItem={renderBooking}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#EFEFEF' },
-  tabBar: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  tabItem: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabItemActive: { borderBottomColor: Colors.light.primary },
-  tabText: { fontSize: 12, fontWeight: '600', color: '#9CA3AF' },
-  tabTextActive: { color: Colors.light.primary, fontWeight: '800' },
-  scroll: { flex: 1 },
-  scrollContent: { padding: 16, gap: 12 },
-  card: { backgroundColor: '#E0E0E0', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#D1D5DB' },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  driverName: { fontSize: 14, fontWeight: '800', color: Colors.light.text },
-  statusText: { fontSize: 12, fontWeight: '700' },
-  time: { fontSize: 20, fontWeight: '800', color: '#2A2A2A', marginTop: 4 },
-  dateText: { fontSize: 11, color: Colors.light.textSecondary, marginBottom: 12 },
-  routeWrap: { gap: 4 },
-  routeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  routeText: { fontSize: 12, fontWeight: '600', color: Colors.light.text },
-  routeLine: { height: 12, width: 1, backgroundColor: '#9CA3AF', marginLeft: 5 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 16 },
-  trackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.light.primary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
-  trackText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
-  detailsBtn: { backgroundColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  detailsText: { fontSize: 12, fontWeight: '700', color: Colors.light.text },
-  emptyText: { textAlign: 'center', color: '#9CA3AF', marginTop: 20, fontSize: 14 },
-  error: { textAlign: 'center', color: Colors.light.primary, fontSize: 13, marginBottom: 10 }
+  root: { flex: 1, backgroundColor: '#E5E7EB' },
+  
+  // Tabs
+  tabsWrapper: { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  tabsContainer: { paddingHorizontal: 16, paddingVertical: 12, gap: 20 },
+  tabItem: { paddingBottom: 8, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabItemActive: { borderBottomColor: '#E93F3F' },
+  tabText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
+  tabTextActive: { color: '#E93F3F', fontWeight: '800' },
+
+  list: { padding: 16, gap: 16 },
+  
+  // Grey Card Design
+  card: { backgroundColor: '#D1D5DB', borderRadius: 16, padding: 16 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  driverName: { fontSize: 15, fontWeight: '700', color: '#374151' },
+  statusText: { fontSize: 14, fontWeight: '800' },
+  
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  timeText: { fontSize: 24, fontWeight: '800', color: '#111827' },
+  dateSeatsText: { fontSize: 13, fontWeight: '600', color: '#4B5563' },
+  
+  // Route Lines
+  routeContainer: { position: 'relative', marginBottom: 16, paddingLeft: 20 },
+  routeLine: { position: 'absolute', left: 5, top: 10, bottom: 10, width: 2, backgroundColor: '#9CA3AF' },
+  routeItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  dotStart: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#111827', backgroundColor: '#D1D5DB', position: 'absolute', left: -20 },
+  dotEnd: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#E93F3F', position: 'absolute', left: -20 },
+  routeText: { fontSize: 14, fontWeight: '600', color: '#111827', flex: 1 },
+
+  footerRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
+  detailsBtn: { backgroundColor: '#FFF', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  detailsBtnText: { fontSize: 13, fontWeight: '700', color: '#111827' },
+
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  emptyText: { fontSize: 16, color: '#6B7280', fontWeight: '600' },
 });

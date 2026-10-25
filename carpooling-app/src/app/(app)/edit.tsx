@@ -11,8 +11,8 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppHeader } from '@/components/app-header'; // <-- Use the perfect header
 import {
     Avatar,
     Badge,
@@ -22,7 +22,6 @@ import {
     ScreenScroll,
     SectionGroup,
 } from '@/components';
-import { ScreenHeader } from '@/components/screen-header';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { ApiError, getProfile, updateProfile } from '@/lib/api';
@@ -83,9 +82,9 @@ export default function EditProfileScreen() {
   const displayName = fullName || user?.username || 'User';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar style="dark" />
-      <ScreenHeader title="Profile" showBack />
+    <View style={styles.safe}>
+      <StatusBar style="light" />
+      <AppHeader title="Profile" />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -133,7 +132,7 @@ export default function EditProfileScreen() {
           <Button label="Save changes" onPress={onSave} loading={saving} />
         </ScreenCTA>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 

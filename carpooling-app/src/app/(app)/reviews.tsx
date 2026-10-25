@@ -2,10 +2,9 @@ import { StatusBar } from 'expo-status-bar';
 import { Star } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppHeader } from '@/components/app-header'; // <-- Use the perfect header
 import { ScreenScroll, SectionGroup } from '@/components';
-import { ScreenHeader } from '@/components/screen-header';
 import { Colors } from '@/constants/theme';
 
 type Review = {
@@ -31,9 +30,9 @@ export default function ReviewsScreen() {
   const list = tab === 'Received' ? RECEIVED : GIVEN;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar style="dark" />
-      <ScreenHeader title="My reviews" showBack />
+    <View style={styles.safe}>
+      <StatusBar style="light" />
+      <AppHeader title="My reviews" />
 
       <ScreenScroll>
         {/* Segmented tabs */}
@@ -78,7 +77,7 @@ export default function ReviewsScreen() {
             : 'Ratings you gave to drivers and passengers.'}
         </Text>
       </ScreenScroll>
-    </SafeAreaView>
+    </View>
   );
 }
 
