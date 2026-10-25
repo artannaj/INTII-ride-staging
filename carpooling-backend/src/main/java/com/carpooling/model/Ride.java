@@ -33,8 +33,38 @@ public class Ride {
     @Column(length = 255)
     private String note;
 
+    // Coordinates are optional so rides posted before tracking existed still load
+    @Column(name = "origin_lat")
+    private Double originLat;
+
+    @Column(name = "origin_lng")
+    private Double originLng;
+
+    @Column(name = "destination_lat")
+    private Double destinationLat;
+
+    @Column(name = "destination_lng")
+    private Double destinationLng;
+
+    // Live driver position, only updated while the ride is IN_PROGRESS
+    @Column(name = "current_lat")
+    private Double currentLat;
+
+    @Column(name = "current_lng")
+    private Double currentLng;
+
+    @Column(name = "location_updated_at")
+    private LocalDateTime locationUpdatedAt;
+
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
+    @Builder.Default
     private Status status = Status.ACTIVE;
 
     @Column(name = "created_at")
@@ -46,5 +76,5 @@ public class Ride {
         if (status == null) status = Status.ACTIVE;
     }
 
-    public enum Status { ACTIVE, FULL, CANCELLED, COMPLETED }
+    public enum Status { ACTIVE, FULL, IN_PROGRESS, CANCELLED, COMPLETED }
 }

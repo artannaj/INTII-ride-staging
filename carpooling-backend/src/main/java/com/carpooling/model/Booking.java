@@ -26,6 +26,7 @@ public class Booking {
 
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
+    @Builder.Default
     private Status status = Status.PENDING;
 
     @Column(name = "created_at")
@@ -37,5 +38,5 @@ public class Booking {
         if (status == null) status = Status.PENDING;
     }
 
-    public enum Status { PENDING, CONFIRMED, COMPLETED, CANCELLED }
+    public enum Status { PENDING, CONFIRMED, REJECTED, COMPLETED, CANCELLED }
 }

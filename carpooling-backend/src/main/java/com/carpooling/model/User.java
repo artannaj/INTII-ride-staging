@@ -77,6 +77,17 @@ public class User {
     @Column(name = "biometric_enabled")
     private Boolean biometricEnabled = false;
 
+    // ============ DRIVER PROFILE (Member 1) ============
+
+    @Column(name = "vehicle_model", length = 60)
+    private String vehicleModel;
+
+    @Column(name = "vehicle_color", length = 30)
+    private String vehicleColor;
+
+    @Column(name = "vehicle_plate", length = 15)
+    private String vehiclePlate;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20)
     private UserStatus status = UserStatus.ACTIVE;
@@ -171,6 +182,15 @@ public class User {
 
     public Boolean getBiometricEnabled() { return biometricEnabled; }
     public void setBiometricEnabled(Boolean biometricEnabled) { this.biometricEnabled = biometricEnabled; }
+
+    public String getVehicleModel() { return vehicleModel; }
+    public void setVehicleModel(String vehicleModel) { this.vehicleModel = vehicleModel; }
+
+    public String getVehicleColor() { return vehicleColor; }
+    public void setVehicleColor(String vehicleColor) { this.vehicleColor = vehicleColor; }
+
+    public String getVehiclePlate() { return vehiclePlate; }
+    public void setVehiclePlate(String vehiclePlate) { this.vehiclePlate = vehiclePlate; }
 
     public UserStatus getStatus() { return status; }
     public void setStatus(UserStatus status) { this.status = status; }

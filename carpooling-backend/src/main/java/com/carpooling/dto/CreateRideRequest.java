@@ -10,6 +10,10 @@ public class CreateRideRequest {
     private BigDecimal price;
     private Integer seatsAvailable;
     private String note;
+    private Double originLat;
+    private Double originLng;
+    private Double destinationLat;
+    private Double destinationLng;
 
     // Getters and Setters
     public String getOrigin() { return origin; }
@@ -24,4 +28,12 @@ public class CreateRideRequest {
     public void setSeatsAvailable(Integer seatsAvailable) { this.seatsAvailable = seatsAvailable; }
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
+    public Double getOriginLat() { return originLat; }
+    public void setOriginLat(Double originLat) { this.originLat = originLat; }
+    public Double getOriginLng() { return originLng; }
+    public void setOriginLng(Double originLng) { this.originLng = originLng; }
+    public Double getDestinationLat() { return destinationLat; }
+    public void setDestinationLat(Double destinationLat) { this.destinationLat = destinationLat; }
+    public Double getDestinationLng() { return destinationLng; }
+    public void setDestinationLng(Double destinationLng) { this.destinationLng = destinationLng; }
 }
