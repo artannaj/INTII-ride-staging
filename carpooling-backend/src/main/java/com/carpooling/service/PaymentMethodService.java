@@ -45,8 +45,8 @@ public class PaymentMethodService {
         method.setUserId(userId);
         method.setType(type);
         method.setProvider(request.getProvider().trim());
-        method.setAccountRef(request.getAccountRef());
-        method.setExpiryDate(request.getExpiryDate());
+        method.setAccountRef(maskAccountRef(type, request.getAccountRef()));
+        method.setExpiryDate(normaliseExpiry(type, request.getExpiryDate()));
 
         boolean makeDefault = Boolean.TRUE.equals(request.getIsDefault());
         // If this is the first method, always make it default
@@ -77,10 +77,14 @@ public class PaymentMethodService {
             throw new ApiException("Not your payment method", HttpStatus.FORBIDDEN.value());
         }
 
-        method.setType(parseType(request.getType()));
+        PaymentMethod.Type type = parseType(request.getType());
+        method.setType(type);
         method.setProvider(request.getProvider().trim());
-        method.setAccountRef(request.getAccountRef());
-        method.setExpiryDate(request.getExpiryDate());
+        // Keep the stored mask if the client sends it back unchanged
+        if (request.getAccountRef() != null && !request.getAccountRef().equals(method.getAccountRef())) {
+            method.setAccountRef(maskAccountRef(type, request.getAccountRef()));
+        }
+        method.setExpiryDate(normaliseExpiry(type, request.getExpiryDate()));
 
         methodRepository.save(method);
         return PaymentMethodDto.from(method);
@@ -143,6 +147,28 @@ public class PaymentMethodService {
         if (request.getProvider() == null || request.getProvider().isBlank()) {
             throw new ApiException("Provider is required", HttpStatus.BAD_REQUEST.value());
         }
+    }
+
+    /**
+     * Never store full card/account numbers: keep only the last 4 digits,
+     * e.g. "4111 1111 1111 4821" becomes "•••• 4821".
+     */
+    private String maskAccountRef(PaymentMethod.Type type, String raw) {
+        if (type == PaymentMethod.Type.CASH || raw == null || raw.isBlank()) return null;
+        String digits = raw.replaceAll("\\D", "");
+        if (digits.length() < 4) {
+            throw new ApiException("Enter at least the last 4 digits of the account", HttpStatus.BAD_REQUEST.value());
+        }
+        return "•••• " + digits.substring(digits.length() - 4);
+    }
+
+    private String normaliseExpiry(PaymentMethod.Type type, String raw) {
+        if (type != PaymentMethod.Type.CARD || raw == null || raw.isBlank()) return null;
+        String value = raw.trim();
+        if (!value.matches("(0[1-9]|1[0-2])/\\d{2}")) {
+            throw new ApiException("Card expiry must be MM/YY", HttpStatus.BAD_REQUEST.value());
+        }
+        return value;
     }
 
     private PaymentMethod.Type parseType(String raw) {

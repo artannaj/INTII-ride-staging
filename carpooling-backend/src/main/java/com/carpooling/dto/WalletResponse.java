@@ -9,6 +9,7 @@ public class WalletResponse {
     private Boolean autoTopupEnabled;
     private BigDecimal autoTopupThreshold;
     private BigDecimal autoTopupAmount;
+    private BigDecimal totalEarned;
     private List<TransactionDto> transactions;
 
     public WalletResponse() {
@@ -22,6 +23,9 @@ public class WalletResponse {
 
     public BigDecimal getAutoTopupThreshold() { return autoTopupThreshold; }
     public void setAutoTopupThreshold(BigDecimal autoTopupThreshold) { this.autoTopupThreshold = autoTopupThreshold; }
+
+    public BigDecimal getTotalEarned() { return totalEarned; }
+    public void setTotalEarned(BigDecimal totalEarned) { this.totalEarned = totalEarned; }
 
     public BigDecimal getAutoTopupAmount() { return autoTopupAmount; }
     public void setAutoTopupAmount(BigDecimal autoTopupAmount) { this.autoTopupAmount = autoTopupAmount; }

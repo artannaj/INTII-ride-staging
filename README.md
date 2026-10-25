@@ -46,5 +46,21 @@ Campus carpooling application for INTI International University students.
 - **Biometrics:** Settings → *Biometric login* stores a device-only copy of the
   session that Face ID / fingerprint unlocks from the login screen (expires with
   the 24 h JWT). Wallet → *Biometric payments* requires a biometric check before
-  top-ups. In Expo Go on iOS, Face ID falls back to the device passcode; it works
+  top-ups and wallet-paid seat requests. In Expo Go on iOS, Face ID falls back to the device passcode; it works
   natively in a dev/production build.
+
+## Payments (Campus Wallet)
+
+- **Top-ups are simulated** – no real card or bank is charged. A top-up must come
+  from a saved card, e-wallet or bank (not cash), between RM 1 and RM 500, and the
+  balance is capped at RM 2,000.
+- **Ride fares:** at checkout passengers pick *Campus Wallet* (default) or *Cash
+  to driver*. Wallet fares are held when the seat is requested and refunded in full
+  if the passenger cancels before the trip, the driver declines/cancels, or the
+  trip starts before the request was accepted. When the driver ends the trip the
+  fare is credited to the driver's wallet (`DRIVER_EARNING`).
+- Every balance change locks the wallet row and writes a signed ledger entry
+  (debits negative), so the transaction history always sums to the balance.
+- Only the last 4 digits of card/bank/e-wallet numbers are stored.
+- Not built yet: real payment gateway (e.g. Billplz/ToyyibPay FPX), withdrawals,
+  referral rewards, late-cancellation fees.

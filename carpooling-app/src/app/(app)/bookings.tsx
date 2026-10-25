@@ -28,8 +28,19 @@ export default function BookingsScreen() {
 
   const filteredBookings = bookings.filter(b => {
     if (activeTab === 'All') return true;
+    // Backend spells it CANCELLED, and declined requests belong on that tab too
+    if (activeTab === 'Canceled') return b.status === 'CANCELLED' || b.status === 'REJECTED';
     return b.status.toUpperCase() === activeTab.toUpperCase();
   });
+
+  const paymentLabel = (b: Booking) => {
+    switch (b.paymentStatus) {
+      case 'PAID':
+      case 'PAID_OUT': return `Paid RM ${b.totalPrice.toFixed(2)} · wallet`;
+      case 'REFUNDED': return `Refunded RM ${b.totalPrice.toFixed(2)}`;
+      default: return `RM ${b.totalPrice.toFixed(2)} · cash`;
+    }
+  };
 
   const getStatusColor = (status: BookingStatus) => {
     switch (status) {
@@ -60,7 +71,7 @@ export default function BookingsScreen() {
         {/* Time Row */}
         <View style={styles.timeRow}>
           <Text style={styles.timeText}>{timeString}</Text>
-          <Text style={styles.dateSeatsText}>{dateString} · {item.seatsBooked} seat</Text>
+          <Text style={styles.dateSeatsText}>{dateString} · {item.seatsBooked} seat · {paymentLabel(item)}</Text>
         </View>
 
         {/* Route Row */}
@@ -80,7 +91,7 @@ export default function BookingsScreen() {
         <View style={styles.footerRow}>
           <Pressable 
             style={styles.detailsBtn}
-            onPress={() => router.push({ pathname: '/(app)/ride-details', params: { rideId: item.rideId } })}
+            onPress={() => router.push({ pathname: '/(app)/booking-details', params: { bookingId: item.id } })}
           >
             <Text style={styles.detailsBtnText}>View Details</Text>
           </Pressable>

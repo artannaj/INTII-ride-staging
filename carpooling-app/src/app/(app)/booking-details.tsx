@@ -1,12 +1,19 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, ScrollView } from 'react-native';
-import { Star, ShieldCheck, Clock, MapPin, CheckCircle2, XCircle, CalendarClock } from 'lucide-react-native';
+import { Star, ShieldCheck, Clock, MapPin, CheckCircle2, XCircle, CalendarClock, Wallet as WalletIcon, Banknote } from 'lucide-react-native';
 
 import { AppHeader } from '@/components/app-header';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
-import { getBooking, type Booking } from '@/lib/api';
+import { ApiError, cancelBooking, getBooking, type Booking } from '@/lib/api';
+
+const PAYMENT_TEXT: Record<Booking['paymentStatus'], string> = {
+  PAID: 'Paid from Campus Wallet',
+  REFUNDED: 'Refunded to your Campus Wallet',
+  PAID_OUT: 'Paid from Campus Wallet',
+  CASH_ON_PICKUP: 'Pay the driver in cash at pickup',
+};
 
 export default function BookingDetailsScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
@@ -14,6 +21,32 @@ export default function BookingDetailsScreen() {
   
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
+
+  function confirmCancel() {
+    if (!token || !booking) return;
+    const refundNote =
+      booking.paymentStatus === 'PAID'
+        ? ` RM ${booking.totalPrice.toFixed(2)} will be refunded to your wallet.`
+        : '';
+    Alert.alert('Cancel booking?', `Your seat will be released.${refundNote}`, [
+      { text: 'Keep booking', style: 'cancel' },
+      {
+        text: 'Cancel booking',
+        style: 'destructive',
+        onPress: async () => {
+          setCancelling(true);
+          try {
+            setBooking(await cancelBooking(token, booking.id));
+          } catch (err) {
+            Alert.alert('Could not cancel', err instanceof ApiError ? err.message : 'Please try again.');
+          } finally {
+            setCancelling(false);
+          }
+        },
+      },
+    ]);
+  }
 
   useEffect(() => {
     if (!token || !bookingId) return;
@@ -46,6 +79,9 @@ export default function BookingDetailsScreen() {
   const isConfirmed = booking.status === 'CONFIRMED';
 
   const showTrackButton = isConfirmed && isWithinOneHour;
+  const canCancel =
+    (isPending || isConfirmed) && booking.rideStatus !== 'IN_PROGRESS' && booking.rideStatus !== 'COMPLETED';
+  const paidByWallet = booking.paymentMethod === 'WALLET';
   const showFutureStatus = isConfirmed && !isWithinOneHour;
 
   return (
@@ -139,6 +175,17 @@ export default function BookingDetailsScreen() {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>Payment</Text>
+          <View style={styles.paymentRow}>
+            {paidByWallet ? <WalletIcon size={20} color="#374151" /> : <Banknote size={20} color="#374151" />}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.paymentTitle}>{PAYMENT_TEXT[booking.paymentStatus]}</Text>
+              <Text style={styles.paymentSub}>RM {booking.totalPrice.toFixed(2)}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.cardTitle}>Vehicle</Text>
           <View style={styles.vehicleRow}>
             <View style={{ flex: 1 }}>
@@ -174,12 +221,24 @@ export default function BookingDetailsScreen() {
             <Text style={[styles.trackBtnText, { color: '#6B7280' }]}>Pending Approval</Text>
           </View>
         ) : null}
+        {canCancel ? (
+          <Pressable style={styles.cancelLink} onPress={confirmCancel} disabled={cancelling}>
+            <Text style={styles.cancelLinkText}>
+              {cancelling ? 'Cancelling…' : isPending ? 'Cancel request' : 'Cancel booking'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  paymentRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  paymentTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  paymentSub: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  cancelLink: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
+  cancelLinkText: { fontSize: 15, fontWeight: '700', color: '#EF4444' },
   root: { flex: 1, backgroundColor: '#D1D5DB' },
   scrollContent: { padding: 16, gap: 16 },
   statusBanner: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, gap: 12 },

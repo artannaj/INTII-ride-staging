@@ -38,12 +38,14 @@ public class RideService {
     private final RideRepository rideRepository;
     private final UserRepository userRepository;
     private final BookingRepository bookingRepository;
+    private final WalletService walletService;
 
     public RideService(RideRepository rideRepository, UserRepository userRepository,
-                       BookingRepository bookingRepository) {
+                       BookingRepository bookingRepository, WalletService walletService) {
         this.rideRepository = rideRepository;
         this.userRepository = userRepository;
         this.bookingRepository = bookingRepository;
+        this.walletService = walletService;
     }
 
     /* ---------- Passenger-facing queries ---------- */
@@ -146,7 +148,10 @@ public class RideService {
         // Requests the driver never answered can't join a trip that's already moving
         List<Booking> pending = bookingRepository.findByRideIdAndStatusIn(
                 ride.getId(), EnumSet.of(Booking.Status.PENDING));
-        pending.forEach(b -> b.setStatus(Booking.Status.REJECTED));
+        pending.forEach(b -> {
+            b.setStatus(Booking.Status.REJECTED);
+            walletService.refundBooking(b, "trip started before your request was accepted");
+        });
         bookingRepository.saveAll(pending);
 
         ride.setStatus(Ride.Status.IN_PROGRESS);
@@ -178,7 +183,11 @@ public class RideService {
 
         List<Booking> confirmed = bookingRepository.findByRideIdAndStatusIn(
                 ride.getId(), EnumSet.of(Booking.Status.CONFIRMED));
-        confirmed.forEach(b -> b.setStatus(Booking.Status.COMPLETED));
+        String label = BookingService.rideLabel(ride);
+        confirmed.forEach(b -> {
+            b.setStatus(Booking.Status.COMPLETED);
+            walletService.payOutBooking(b, driver.getId(), label);
+        });
         bookingRepository.saveAll(confirmed);
 
         ride.setStatus(Ride.Status.COMPLETED);
@@ -196,7 +205,10 @@ public class RideService {
         }
 
         List<Booking> open = bookingRepository.findByRideIdAndStatusIn(ride.getId(), OPEN_BOOKINGS);
-        open.forEach(b -> b.setStatus(Booking.Status.CANCELLED));
+        open.forEach(b -> {
+            b.setStatus(Booking.Status.CANCELLED);
+            walletService.refundBooking(b, "driver cancelled " + BookingService.rideLabel(ride));
+        });
         bookingRepository.saveAll(open);
 
         ride.setStatus(Ride.Status.CANCELLED);

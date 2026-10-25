@@ -14,6 +14,8 @@ public class BookingResponse {
     private BigDecimal totalPrice;
     private String status;
     private LocalDateTime createdAt;
+    private String paymentMethod;
+    private String paymentStatus;
 
     // Ride summary so list screens don't need a second request per booking
     private String origin;
@@ -42,6 +44,8 @@ public class BookingResponse {
         r.totalPrice = b.getTotalPrice();
         r.status = b.getStatus() != null ? b.getStatus().name() : null;
         r.createdAt = b.getCreatedAt();
+        r.paymentMethod = b.getPaymentMethod() != null ? b.getPaymentMethod().name() : Booking.PaymentMethod.CASH.name();
+        r.paymentStatus = b.getPaymentStatus() != null ? b.getPaymentStatus().name() : Booking.PaymentStatus.CASH_ON_PICKUP.name();
 
         if (ride != null) {
             r.origin = ride.getOrigin();
@@ -70,6 +74,8 @@ public class BookingResponse {
     public BigDecimal getTotalPrice() { return totalPrice; }
     public String getStatus() { return status; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public String getPaymentMethod() { return paymentMethod; }
+    public String getPaymentStatus() { return paymentStatus; }
     public String getOrigin() { return origin; }
     public String getDestination() { return destination; }
     public LocalDateTime getDepartureTime() { return departureTime; }
