@@ -3,6 +3,7 @@ import {
     Download,
     Eye,
     FileText,
+    Fingerprint,
     Flag,
     Info,
     Lock,
@@ -30,6 +31,7 @@ import {
     updateSettings,
     type Settings
 } from '@/lib/api';
+import { getBiometricSupport, type BiometricSupport } from '@/lib/biometrics';
 
 type NotifRow = {
   key: 'notifyRideUpdates' | 'notifyPayments' | 'notifyPromos' | 'notifyReminders';
@@ -44,7 +46,8 @@ const NOTIF_ROWS: NotifRow[] = [
 ];
 
 export default function SettingsScreen() {
-  const { token, signOut } = useAuth();
+  const { token, signOut, biometricLoginEnabled, enableBiometricLogin, disableBiometricLogin } = useAuth();
+  const [bioSupport, setBioSupport] = useState<BiometricSupport | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [twoFactor, setTwoFactor] = useState(false);
   const [notifs, setNotifs] = useState({
@@ -66,6 +69,24 @@ export default function SettingsScreen() {
         setError(err instanceof ApiError ? err.message : 'Could not load settings.')
       );
   }, [token]);
+
+  useEffect(() => {
+    void getBiometricSupport().then(setBioSupport);
+  }, []);
+
+  async function toggleBiometricLogin(value: boolean) {
+    setError(null);
+    if (!value) {
+      await disableBiometricLogin();
+      return;
+    }
+    if (!bioSupport?.available) {
+      setError(bioSupport?.reason ?? 'Biometrics are not available on this device.');
+      return;
+    }
+    const ok = await enableBiometricLogin();
+    if (!ok) setError('Biometric check was cancelled, so biometric login stays off.');
+  }
 
   async function toggleTwoFactor(value: boolean) {
     if (!token) return;
@@ -139,6 +160,19 @@ export default function SettingsScreen() {
         {/* PRIVACY & SECURITY */}
         <SectionGroup title="Privacy & security">
           <MenuRow Icon={Lock} title="Change password" onPress={() => {}} />
+          <MenuRow
+            Icon={Fingerprint}
+            title={`${bioSupport?.label ?? 'Biometric'} login`}
+            subtitle={
+              bioSupport && !bioSupport.available
+                ? bioSupport.reason
+                : 'Unlock the app without typing your password'
+            }
+            onPress={() => toggleBiometricLogin(!biometricLoginEnabled)}
+            right={
+              <Toggle value={biometricLoginEnabled} onChange={toggleBiometricLogin} />
+            }
+          />
           <MenuRow
             Icon={Shield}
             title="Two-step verification"

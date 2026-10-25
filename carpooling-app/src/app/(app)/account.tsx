@@ -3,16 +3,61 @@ import { StatusBar } from 'expo-status-bar';
 import {
   Car, CreditCard, Eye, Flag, Gift, Info, MapPin, MessageCircle, Settings as SettingsIcon, Shield, User,
 } from 'lucide-react-native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar, Badge, BottomNav, MenuRow, ScreenScroll, SectionGroup } from '@/components';
 import { ScreenHeader } from '@/components/screen-header';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
+import { usePolling } from '@/hooks/use-polling';
+import { ApiError, getDriverProfile, getMyBookings, getMyRides, getWallet } from '@/lib/api';
 
 export default function AccountScreen() {
-  const { user, signOut } = useAuth();
+  const { user, token, signOut, setRole } = useAuth();
+  const [balance, setBalance] = useState<number | null>(null);
+  const [rideCount, setRideCount] = useState<number | null>(null);
+  const [switching, setSwitching] = useState(false);
+  const isDriver = user?.role === 'DRIVER';
+
+  usePolling(async () => {
+    if (!token) return;
+    const [wallet, count] = await Promise.all([
+      getWallet(token).then((w) => w.balance).catch(() => null),
+      // Drivers see trips they drove, passengers see trips they took
+      (isDriver
+        ? getMyRides(token).then((r) => r.filter((x) => x.status === 'COMPLETED').length)
+        : getMyBookings(token).then((b) => b.filter((x) => x.status === 'COMPLETED').length)
+      ).catch(() => null),
+    ]);
+    setBalance(wallet);
+    setRideCount(count);
+  }, 30000);
+
+  async function switchMode() {
+    if (!token || switching) return;
+    setSwitching(true);
+    try {
+      if (isDriver) {
+        await setRole('PASSENGER');
+        router.replace('/(app)');
+        return;
+      }
+      // First-time drivers add their vehicle; returning drivers switch straight back
+      const profile = await getDriverProfile(token);
+      if (!profile.complete) {
+        router.push('/(app)/driver/setup');
+        return;
+      }
+      await setRole('DRIVER');
+      router.replace('/(app)/driver');
+    } catch (err) {
+      Alert.alert('Could not switch mode', err instanceof ApiError ? err.message : 'Please try again.');
+    } finally {
+      setSwitching(false);
+    }
+  }
 
   const displayName = user?.username || 'User';
   const email = user?.email || '';
@@ -35,8 +80,16 @@ export default function AccountScreen() {
         </Pressable>
 
         <View style={styles.tilesRow}>
-          <Tile label="Wallet" value="RM 12.00" onPress={() => router.push('/(app)/wallet')} />
-          <Tile label="Rides" value="12" onPress={() => {}} />
+          <Tile
+            label="Wallet"
+            value={balance !== null ? `RM ${balance.toFixed(2)}` : '—'}
+            onPress={() => router.push('/(app)/wallet')}
+          />
+          <Tile
+            label={isDriver ? 'Trips driven' : 'Rides'}
+            value={rideCount !== null ? String(rideCount) : '—'}
+            onPress={() => router.push(isDriver ? '/(app)/driver' : '/(app)/bookings')}
+          />
           <Tile label="Rating" value="4.9 ★" onPress={() => router.push('/(app)/reviews')} />
         </View>
 
@@ -48,7 +101,21 @@ export default function AccountScreen() {
         </SectionGroup>
 
         <SectionGroup title="Driving">
-          <MenuRow Icon={Car} title="Become a driver" subtitle="Earn by sharing your commute" onPress={() => {}} last />
+          {isDriver ? (
+            <MenuRow
+              Icon={Car}
+              title="Vehicle details"
+              subtitle="Model, colour and plate shown to passengers"
+              onPress={() => router.push('/(app)/driver/setup')}
+            />
+          ) : null}
+          <MenuRow
+            Icon={Car}
+            title={switching ? 'Switching…' : isDriver ? 'Switch to passenger mode' : 'Switch to driver mode'}
+            subtitle={isDriver ? 'Find and book rides' : 'Share your commute and split costs'}
+            onPress={switchMode}
+            last
+          />
         </SectionGroup>
 
         <SectionGroup title="Safety & support">

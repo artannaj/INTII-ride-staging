@@ -34,7 +34,19 @@
         }
       ],
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "INTI Ride shares your location with passengers while you drive a trip, and shows your driver's position on the map."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to log in and confirm wallet payments."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

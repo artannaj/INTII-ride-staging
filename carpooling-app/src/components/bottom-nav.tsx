@@ -1,8 +1,9 @@
 import {
-  Home,
-  Mail,
-  MessageCircle,
   Bookmark,
+  Car,
+  Home,
+  MessageCircle,
+  PlusCircle,
   User,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -11,8 +12,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/context/auth';
 
-export type NavTab = 'home' | 'inbox' | 'chat' | 'bookings' | 'account';
+export type NavTab = 'home' | 'post' | 'chat' | 'bookings' | 'account';
 
 type NavItem = {
   key: NavTab;
@@ -21,11 +23,17 @@ type NavItem = {
   path: string;
 };
 
-const ITEMS: NavItem[] = [
+const PASSENGER_ITEMS: NavItem[] = [
   { key: 'home', label: 'Home', Icon: Home, path: '/(app)' },
-  { key: 'inbox', label: 'Inbox', Icon: Mail, path: '/(app)/inbox' },
-  { key: 'chat', label: 'Chat', Icon: MessageCircle, path: '/(app)/chat' },
   { key: 'bookings', label: 'Bookings', Icon: Bookmark, path: '/(app)/bookings' },
+  { key: 'chat', label: 'Chat', Icon: MessageCircle, path: '/(app)/chat' },
+  { key: 'account', label: 'Account', Icon: User, path: '/(app)/account' },
+];
+
+const DRIVER_ITEMS: NavItem[] = [
+  { key: 'home', label: 'My rides', Icon: Car, path: '/(app)/driver' },
+  { key: 'post', label: 'Post', Icon: PlusCircle, path: '/(app)/driver/post-ride' },
+  { key: 'chat', label: 'Chat', Icon: MessageCircle, path: '/(app)/chat' },
   { key: 'account', label: 'Account', Icon: User, path: '/(app)/account' },
 ];
 
@@ -35,15 +43,19 @@ type BottomNavProps = {
 
 export function BottomNav({ active }: BottomNavProps) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const items = user?.role === 'DRIVER' ? DRIVER_ITEMS : PASSENGER_ITEMS;
 
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      {ITEMS.map(({ key, label, Icon, path }) => {
+      {items.map(({ key, label, Icon, path }) => {
         const isActive = key === active;
         return (
           <Pressable
             key={key}
-            onPress={() => router.push(path as any)}
+            onPress={() => {
+              if (!isActive) router.push(path as any);
+            }}
             style={styles.item}>
             <View style={[styles.iconWrap, isActive && styles.iconWrapActive]}>
               <Icon

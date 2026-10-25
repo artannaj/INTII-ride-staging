@@ -7,3 +7,5 @@ export { ScreenHeader } from './screen-header';
 export { ScreenScroll } from './screen-scroll';
 export { SectionGroup } from './section-group';
 export * from './ui';
+export { RideMap } from './ride-map';
+export { AppHeader } from './app-header';

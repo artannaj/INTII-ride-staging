@@ -42,6 +42,8 @@ import {
     type PaymentMethod,
     type Wallet,
 } from '@/lib/api';
+import { authenticate, getBiometricSupport, type BiometricSupport } from '@/lib/biometrics';
+import { getBiometricPayEnabled, setBiometricPayEnabled } from '@/lib/storage';
 
 const TYPE_ICON = {
   CARD: CreditCard,
@@ -57,8 +59,10 @@ export default function WalletScreen() {
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Preferences (local state only — wire to backend later if needed)
-  const [bioPay, setBioPay] = useState(true);
+  // Biometric payments is a per-device preference stored in SecureStore.
+  // Auto top-up and alerts are still local-only UI state.
+  const [bioPay, setBioPay] = useState(false);
+  const [bioSupport, setBioSupport] = useState<BiometricSupport | null>(null);
   const [autoTopUp, setAutoTopUp] = useState(false);
   const [alerts, setAlerts] = useState(true);
 
@@ -90,12 +94,39 @@ export default function WalletScreen() {
   }
 
   useEffect(() => {
+    void getBiometricSupport().then(setBioSupport);
+    void getBiometricPayEnabled().then(setBioPay);
+  }, []);
+
+  async function toggleBioPay(value: boolean) {
+    setError(null);
+    if (value) {
+      if (!bioSupport?.available) {
+        setError(bioSupport?.reason ?? 'Biometrics are not available on this device.');
+        return;
+      }
+      // Prove it works before relying on it for payments
+      const ok = await authenticate('Confirm to turn on biometric payments');
+      if (!ok) return;
+    }
+    setBioPay(value);
+    await setBiometricPayEnabled(value);
+  }
+
+  useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function doTopUp() {
     if (!token) return;
+    if (bioPay) {
+      const ok = await authenticate(`Confirm top-up of RM ${topupAmount.toFixed(2)}`);
+      if (!ok) {
+        setError('Top-up cancelled: biometric check did not pass.');
+        return;
+      }
+    }
     setTopupBusy(true);
     try {
       await topUpWallet(token, topupAmount, 'Campus Wallet');
@@ -219,8 +250,10 @@ export default function WalletScreen() {
           <SectionGroup title="Security & preferences">
             <MenuRow Icon={Lock} title="Reset payment PIN" onPress={() => {}} />
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Biometric payments</Text>
-              <Toggle value={bioPay} onChange={setBioPay} />
+              <Text style={styles.toggleLabel}>
+                {bioSupport?.available ? `${bioSupport.label} for payments` : 'Biometric payments'}
+              </Text>
+              <Toggle value={bioPay} onChange={toggleBioPay} />
             </View>
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Auto top-up</Text>

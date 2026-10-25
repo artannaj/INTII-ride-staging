@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MapPin, Star, ChevronLeft, SlidersHorizontal } from 'lucide-react-native';
+import { MapPin, Users, ChevronLeft } from 'lucide-react-native';
 
 import { BottomNav } from '@/components/bottom-nav';
 import { Colors } from '@/constants/theme';
@@ -32,7 +32,8 @@ export default function SearchResultsScreen() {
       days.push({
         day: d.getDate().toString(),
         label: d.toLocaleDateString('en-US', { weekday: 'short' }),
-        isToday: i === 0
+        isToday: i === 0,
+        dateString: d.toDateString(),
       });
     }
     return days;
@@ -66,6 +67,9 @@ export default function SearchResultsScreen() {
     alert('Ride alert on · we will notify you when a ride matches');
   };
 
+  const selectedDay = weekDays[selectedDate];
+  const dayRides = rides.filter((r) => new Date(r.departureTime).toDateString() === selectedDay.dateString);
+
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
@@ -76,9 +80,7 @@ export default function SearchResultsScreen() {
           <ChevronLeft size={26} color="#FFFFFF" strokeWidth={2.5} />
         </Pressable>
         <Text style={styles.headerTitle}>Search Result</Text>
-        <Pressable style={styles.iconBtn}>
-          <SlidersHorizontal size={22} color="#FFFFFF" strokeWidth={2} />
-        </Pressable>
+        <View style={styles.iconBtn} />
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -88,7 +90,7 @@ export default function SearchResultsScreen() {
           <View style={styles.routeRow}>
             <View style={styles.pickupRing} />
             <Text style={styles.routeText}>{pickup}</Text>
-            <Text style={styles.routeDate}>Today</Text>
+            <Text style={styles.routeDate}>{selectedDay.isToday ? 'Today' : selectedDay.label}</Text>
           </View>
           <View style={styles.routeLine} />
           <View style={styles.routeRow}>
@@ -114,31 +116,34 @@ export default function SearchResultsScreen() {
 
         {/* Results Header */}
         <View style={styles.resultsHeader}>
-          <Text style={styles.resultsCount}>{rides.length} rides available</Text>
-          <Text style={styles.sortText}>Sort: Earliest ▾</Text>
+          <Text style={styles.resultsCount}>
+            {loading ? 'Searching…' : `${dayRides.length} ride${dayRides.length === 1 ? '' : 's'} available`}
+          </Text>
+          <Text style={styles.sortText}>Earliest first</Text>
         </View>
 
         {/* Empty State / Ride Cards */}
-        {rides.length === 0 && !loading ? (
+        {error ? <Text style={styles.emptySub}>{error}</Text> : null}
+
+        {dayRides.length === 0 && !loading ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No rides on this route yet</Text>
+            <Text style={styles.emptyTitle}>
+              {rides.length > 0 ? 'No rides on this day' : 'No rides on this route yet'}
+            </Text>
             <Text style={styles.emptySub}>Try different filters, or get notified when a driver posts one.</Text>
             <Pressable style={styles.notifyBtn} onPress={handleNotify}>
               <Text style={styles.notifyText}>Notify me</Text>
             </Pressable>
           </View>
         ) : (
-          rides.map((ride) => (
+          dayRides.map((ride) => (
             <Pressable 
               key={ride.id} 
               style={styles.rideCard}
               onPress={() => router.push({ pathname: '/(app)/ride-details', params: { rideId: ride.id } })}
             >
               <View style={styles.cardHeader}>
-                <Text style={styles.driverName}>Driver #{ride.driverId}</Text>
-                <View style={styles.matricBadge}>
-                  <Text style={styles.matricText}>I250{ride.driverId}678</Text>
-                </View>
+                <Text style={styles.driverName} numberOfLines={1}>{ride.driverName ?? 'INTI driver'}</Text>
                 <Text style={styles.price}>RM {ride.price.toFixed(2)}</Text>
               </View>
 
@@ -157,9 +162,11 @@ export default function SearchResultsScreen() {
 
               <View style={styles.cardFooter}>
                 <View style={styles.ratingRow}>
-                  <Star size={14} color="#FACC15" fill="#FACC15" />
-                  <Text style={styles.ratingText}>5.0</Text>
-                  <Text style={styles.seatsText}>· {ride.seatsAvailable} seats</Text>
+                  <Users size={14} color="#6B7280" />
+                  <Text style={styles.seatsText}>
+                    {ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} left
+                    {ride.vehicle ? ` · ${ride.vehicle.split(' · ')[0]}` : ''}
+                  </Text>
                 </View>
                 <View style={styles.detailsBtn}>
                   <Text style={styles.detailsText}>View Details</Text>

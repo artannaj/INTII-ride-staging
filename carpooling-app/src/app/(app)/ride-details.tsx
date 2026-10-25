@@ -3,80 +3,73 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Circle, MapPin, Star, Car, ShieldCheck } from 'lucide-react-native';
+import { Circle, MapPin, Car } from 'lucide-react-native';
 
+import { AppHeader } from '@/components/app-header';
+import { RideMap } from '@/components/ride-map';
 import { Avatar, Badge, Card } from '@/components';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
-import { ApiError, searchRides, type Ride } from '@/lib/api';
+import { ApiError, getRide, type Ride } from '@/lib/api';
+import { distanceKm, formatDistance, toLatLng } from '@/lib/geo';
+import { formatDay, formatTime } from '@/lib/status';
 
 export default function RideDetailsScreen() {
   const { token } = useAuth();
   const params = useLocalSearchParams<{ rideId?: string }>();
-  
+
   const [ride, setRide] = useState<Ride | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token || !params.rideId) return;
-    // For simplicity, we are just searching all rides and finding the one we clicked.
-    // In a real app, you'd have a GET /api/rides/{id} endpoint.
-    searchRides(token, 'INTI International University', 'Nilai AEON Mall')
-      .then((rides) => {
-        const found = rides.find((r) => r.id === Number(params.rideId));
-        if (found) setRide(found);
-        else setError('Ride not found');
-      })
+    getRide(token, Number(params.rideId))
+      .then(setRide)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load ride.'));
   }, [token, params.rideId]);
 
   if (!ride) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <View style={styles.safe}>
+        <AppHeader title="Ride Details" />
         <Text style={{ textAlign: 'center', marginTop: 40 }}>{error || 'Loading...'}</Text>
-      </SafeAreaView>
+      </View>
     );
   }
+
+  const origin = toLatLng(ride.originLat, ride.originLng);
+  const destination = toLatLng(ride.destinationLat, ride.destinationLng);
+  const driverName = ride.driverName ?? 'INTI driver';
+  const bookable = ride.status === 'ACTIVE' && ride.seatsAvailable > 0;
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <StatusBar style="light" />
-      
-      {/* Red Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.5} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Ride Details</Text>
-          <View style={styles.backBtn} />
-        </View>
-      </View>
+      <AppHeader title="Ride Details" />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* Driver Card */}
         <Card style={styles.driverCard}>
-          <Avatar name="Max Verstappen" size={50} />
+          <Avatar name={driverName} size={50} />
           <View style={styles.driverInfo}>
-            <Text style={styles.driverName}>Max Verstappen</Text>
-            <Badge label="‚úĒ Verified Driver" variant="success" />
-          </View>
-          <View style={styles.ratingWrap}>
-            <Star size={14} color="#FACC15" fill="#FACC15" />
-            <Text style={styles.ratingNum}>5.0</Text>
+            <Text style={styles.driverName}>{driverName}</Text>
+            <Badge label="✔ INTI student driver" variant="success" />
           </View>
         </Card>
+
+        {/* Route map */}
+        {origin && destination ? (
+          <View style={styles.mapCard}>
+            <RideMap origin={origin} destination={destination} />
+          </View>
+        ) : null}
 
         {/* Ride Info Card */}
         <Card style={styles.infoCard}>
           <View style={styles.infoHeader}>
-            <Text style={styles.timeText}>
-              {new Date(ride.departureTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-            <Text style={styles.dateText}>
-              {new Date(ride.departureTime).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-            </Text>
+            <Text style={styles.timeText}>{formatTime(ride.departureTime)}</Text>
+            <Text style={styles.dateText}>{formatDay(ride.departureTime)}</Text>
           </View>
 
           <View style={styles.routeRow}>
@@ -88,22 +81,13 @@ export default function RideDetailsScreen() {
             <MapPin size={14} color={Colors.light.primary} strokeWidth={2.5} />
             <Text style={styles.routeText}>{ride.destination}</Text>
           </View>
+          {origin && destination ? (
+            <Text style={styles.dateText}>About {formatDistance(distanceKm(origin, destination) * 1.3)} by road</Text>
+          ) : null}
 
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Contribution</Text>
+            <Text style={styles.priceLabel}>Contribution per seat</Text>
             <Text style={styles.priceValue}>RM {ride.price.toFixed(2)}</Text>
-          </View>
-        </Card>
-
-        {/* Preferences Card */}
-        <Card style={styles.prefCard}>
-          <Text style={styles.cardTitle}>Ride preferences</Text>
-          <View style={styles.chips}>
-            {['Quiet ride', 'AC on', 'Soft music', 'No smoking'].map((pref) => (
-              <View key={pref} style={styles.chip}>
-                <Text style={styles.chipText}>{pref}</Text>
-              </View>
-            ))}
           </View>
         </Card>
 
@@ -111,7 +95,7 @@ export default function RideDetailsScreen() {
         {ride.note ? (
           <Card style={styles.noteCard}>
             <Text style={styles.cardTitle}>Ride Note</Text>
-            <Text style={styles.noteText}>‚ÄĘ {ride.note}</Text>
+            <Text style={styles.noteText}>• {ride.note}</Text>
           </Card>
         ) : null}
 
@@ -119,10 +103,10 @@ export default function RideDetailsScreen() {
         <Card style={styles.vehicleCard}>
           <View style={styles.vehicleInfo}>
             <Text style={styles.cardTitle}>Vehicle</Text>
-            <Text style={styles.vehicleText}>Aston Martin Valkyrie</Text>
-            <Text style={styles.vehicleText}>Color: Green</Text>
-            <Text style={styles.vehicleText}>Plate: MY6767</Text>
-            <Text style={styles.vehicleText}>{ride.seatsAvailable} Seat</Text>
+            <Text style={styles.vehicleText}>{ride.vehicle ?? 'Vehicle details not provided'}</Text>
+            <Text style={styles.vehicleText}>
+              {ride.seatsAvailable} seat{ride.seatsAvailable === 1 ? '' : 's'} available
+            </Text>
           </View>
           <View style={styles.vehicleIconWrap}>
             <Car size={40} color="#9CA3AF" />
@@ -132,11 +116,14 @@ export default function RideDetailsScreen() {
 
       {/* Bottom CTA */}
       <View style={styles.cta}>
-        <Pressable 
-          style={styles.confirmBtn}
+        <Pressable
+          style={[styles.confirmBtn, !bookable && { opacity: 0.5 }]}
+          disabled={!bookable}
           onPress={() => router.push({ pathname: '/(app)/confirm-booking', params: { rideId: ride.id } })}
         >
-          <Text style={styles.confirmText}>Confirm Booking</Text>
+          <Text style={styles.confirmText}>
+            {bookable ? 'Request a Seat' : ride.status === 'FULL' ? 'Ride is full' : 'No longer available'}
+          </Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -145,6 +132,7 @@ export default function RideDetailsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#EFEFEF' },
+  mapCard: { height: 180, borderRadius: 16, overflow: 'hidden' },
   header: {
     backgroundColor: Colors.light.primary,
     paddingTop: 60,

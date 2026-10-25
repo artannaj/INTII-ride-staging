@@ -1,8 +1,10 @@
 import { API_BASE_URL } from '@/constants/config';
 import type {
   AuthResponse,
+  AuthUser,
   LoginPayload,
   OtpSentResponse,
+  Role,
   SignupPayload,
   VerifyOtpPayload,
 } from '@/types/auth';
@@ -409,20 +411,120 @@ export function generateReferralCode(token: string): Promise<ReferralSummary> {
 }
 
 /* ==========================================================================
-   RIDES & BOOKINGS (Member 3)
+   RIDES (Member 3 search + Member 1 driver management)
    ========================================================================== */
+
+export type RideStatus = 'ACTIVE' | 'FULL' | 'IN_PROGRESS' | 'CANCELLED' | 'COMPLETED';
 
 export type Ride = {
   id: number;
   driverId: number;
+  driverName: string | null;
+  vehicle: string | null;
   origin: string;
   destination: string;
+  originLat: number | null;
+  originLng: number | null;
+  destinationLat: number | null;
+  destinationLng: number | null;
   departureTime: string;
   price: number;
   seatsAvailable: number;
   note: string | null;
-  status: string;
+  status: RideStatus;
+  /** Only set on the driver's own rides (GET /api/rides/mine). */
+  pendingRequests: number | null;
 };
+
+export type CreateRidePayload = {
+  origin: string;
+  destination: string;
+  originLat?: number;
+  originLng?: number;
+  destinationLat?: number;
+  destinationLng?: number;
+  /** Local time without offset, e.g. 2026-10-25T14:30:00 (backend uses LocalDateTime). */
+  departureTime: string;
+  price: number;
+  seatsAvailable: number;
+  note?: string;
+};
+
+export function searchRides(token: string, origin: string, destination: string): Promise<Ride[]> {
+  return request<Ride[]>(`/api/rides/search?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`, {}, token);
+}
+
+export function getUpcomingRides(token: string): Promise<Ride[]> {
+  return request<Ride[]>('/api/rides/upcoming', {}, token);
+}
+
+export function getRide(token: string, rideId: number): Promise<Ride> {
+  return request<Ride>(`/api/rides/${rideId}`, {}, token);
+}
+
+export function createRide(token: string, payload: CreateRidePayload): Promise<Ride> {
+  return request<Ride>('/api/rides', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, token);
+}
+
+export function getMyRides(token: string): Promise<Ride[]> {
+  return request<Ride[]>('/api/rides/mine', {}, token);
+}
+
+export function getRideBookings(token: string, rideId: number): Promise<Booking[]> {
+  return request<Booking[]>(`/api/rides/${rideId}/bookings`, {}, token);
+}
+
+export function startRide(token: string, rideId: number): Promise<Ride> {
+  return request<Ride>(`/api/rides/${rideId}/start`, { method: 'POST' }, token);
+}
+
+export function completeRide(token: string, rideId: number): Promise<Ride> {
+  return request<Ride>(`/api/rides/${rideId}/complete`, { method: 'POST' }, token);
+}
+
+export function cancelRide(token: string, rideId: number): Promise<Ride> {
+  return request<Ride>(`/api/rides/${rideId}/cancel`, { method: 'POST' }, token);
+}
+
+/* ==========================================================================
+   LIVE TRACKING
+   ========================================================================== */
+
+export type Tracking = {
+  rideId: number;
+  status: RideStatus;
+  driverName: string | null;
+  origin: string;
+  destination: string;
+  originLat: number | null;
+  originLng: number | null;
+  destinationLat: number | null;
+  destinationLng: number | null;
+  /** Null until the trip starts and the driver's phone sends its first fix. */
+  currentLat: number | null;
+  currentLng: number | null;
+  secondsSinceUpdate: number | null;
+};
+
+export function updateRideLocation(token: string, rideId: number, lat: number, lng: number): Promise<void> {
+  return request<void>(`/api/rides/${rideId}/location`, {
+    method: 'PUT',
+    body: JSON.stringify({ lat, lng }),
+  }, token);
+}
+
+export function getTracking(token: string, rideId: number): Promise<Tracking> {
+  return request<Tracking>(`/api/rides/${rideId}/tracking`, {}, token);
+}
+
+/* ==========================================================================
+   BOOKINGS
+   ========================================================================== */
+
+export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'COMPLETED' | 'CANCELLED';
 
 export type Booking = {
   id: number;
@@ -430,23 +532,20 @@ export type Booking = {
   passengerId: number;
   seatsBooked: number;
   totalPrice: number;
-  status: string;
+  status: BookingStatus;
   createdAt: string;
+  origin: string | null;
+  destination: string | null;
+  departureTime: string | null;
+  rideStatus: RideStatus | null;
+  driverId: number | null;
+  driverName: string | null;
+  vehicle: string | null;
+  passengerName: string | null;
+  /** Shared only once the booking is CONFIRMED. */
+  driverPhone: string | null;
+  passengerPhone: string | null;
 };
-
-export function searchRides(token: string, origin: string, destination: string): Promise<Ride[]> {
-  return request<Ride[]>(`/api/rides/search?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`, {}, token);
-}
-
-export function createRide(
-  token: string,
-  payload: { origin: string; destination: string; departureTime: string; price: number; seatsAvailable: number; note?: string }
-): Promise<Ride> {
-  return request<Ride>('/api/rides', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }, token);
-}
 
 export function createBooking(
   token: string,
@@ -460,4 +559,101 @@ export function createBooking(
 
 export function getMyBookings(token: string): Promise<Booking[]> {
   return request<Booking[]>('/api/bookings/my-bookings', {}, token);
+}
+
+export function getBooking(token: string, bookingId: number): Promise<Booking> {
+  return request<Booking>(`/api/bookings/${bookingId}`, {}, token);
+}
+
+export function cancelBooking(token: string, bookingId: number): Promise<Booking> {
+  return request<Booking>(`/api/bookings/${bookingId}/cancel`, { method: 'POST' }, token);
+}
+
+export function acceptBooking(token: string, bookingId: number): Promise<Booking> {
+  return request<Booking>(`/api/bookings/${bookingId}/accept`, { method: 'POST' }, token);
+}
+
+export function rejectBooking(token: string, bookingId: number): Promise<Booking> {
+  return request<Booking>(`/api/bookings/${bookingId}/reject`, { method: 'POST' }, token);
+}
+
+/* ==========================================================================
+   CHAT (driver <-> passenger, one thread per booking)
+   ========================================================================== */
+
+export type ChatMessage = {
+  id: number;
+  bookingId: number;
+  senderId: number;
+  senderName: string | null;
+  mine: boolean;
+  message: string;
+  createdAt: string;
+};
+
+export type Conversation = {
+  bookingId: number;
+  rideId: number;
+  otherName: string | null;
+  otherRole: 'DRIVER' | 'PASSENGER';
+  origin: string;
+  destination: string;
+  departureTime: string;
+  bookingStatus: BookingStatus;
+  lastMessage: string | null;
+  lastMessageAt: string | null;
+};
+
+export function getConversations(token: string): Promise<Conversation[]> {
+  return request<Conversation[]>('/api/bookings/conversations', {}, token);
+}
+
+export function getMessages(token: string, bookingId: number, afterId?: number): Promise<ChatMessage[]> {
+  const query = afterId ? `?after=${afterId}` : '';
+  return request<ChatMessage[]>(`/api/bookings/${bookingId}/messages${query}`, {}, token);
+}
+
+export function sendMessage(token: string, bookingId: number, message: string): Promise<ChatMessage> {
+  return request<ChatMessage>(`/api/bookings/${bookingId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  }, token);
+}
+
+/* ==========================================================================
+   DRIVER PROFILE & ROLE
+   ========================================================================== */
+
+export type DriverProfile = {
+  role: Role;
+  vehicleModel: string | null;
+  vehicleColor: string | null;
+  vehiclePlate: string | null;
+  complete: boolean;
+};
+
+export function getDriverProfile(token: string): Promise<DriverProfile> {
+  return request<DriverProfile>('/api/users/driver-profile', {}, token);
+}
+
+/** Saves vehicle details and switches the account to DRIVER. */
+export function saveDriverProfile(
+  token: string,
+  payload: { vehicleModel: string; vehicleColor: string; vehiclePlate: string }
+): Promise<DriverProfile> {
+  return request<DriverProfile>('/api/users/driver-profile', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  }, token);
+}
+
+export function updateRole(token: string, role: Role): Promise<AuthUser> {
+  return request<AuthUser>('/api/users/role', {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  }, token);
+}
+
+export function getCurrentUser(token: string): Promise<AuthUser> {
+  return request<AuthUser>('/api/auth/me', {}, token);
 }

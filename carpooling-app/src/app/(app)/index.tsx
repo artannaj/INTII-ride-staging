@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, ScrollView, Modal, TouchableOpacity, Linking, Alert } from 'react-native';
@@ -7,29 +7,12 @@ import { Bell, MapPin, ArrowUpDown, Clock, Home, Gift, MessageSquare, Phone, Mai
 
 import { BottomNav } from '@/components/bottom-nav';
 import { Avatar } from '@/components';
+import { filterPlaces } from '@/constants/places';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
-
-const AVAILABLE_LOCATIONS = [
-  { name: 'INTI International University', sub: 'Campus · Nilai', icon: 'campus' },
-  { name: 'Nilai AEON Mall', sub: 'Shopping mall · Nilai', icon: 'mall' },
-  { name: 'Nilai Sentral (KTM)', sub: 'Train station · Nilai', icon: 'train' },
-  { name: 'Giant Nilai', sub: 'Hypermarket · Nilai', icon: 'mall' },
-  { name: 'Bandar Baru Nilai', sub: 'Town centre · Nilai', icon: 'pin' },
-  { name: 'KL Sentral', sub: 'Transit hub · Kuala Lumpur', icon: 'train' },
-  { name: 'KLCC Kiosk', sub: 'Landmark · Kuala Lumpur', icon: 'pin' },
-  { name: 'Bukit Bintang', sub: 'Shopping district · Kuala Lumpur', icon: 'mall' },
-  { name: 'Pavilion Kuala Lumpur', sub: 'Shopping mall · Kuala Lumpur', icon: 'mall' },
-  { name: 'Mid Valley Megamall', sub: 'Shopping mall · Kuala Lumpur', icon: 'mall' },
-  { name: 'Sunway Pyramid', sub: 'Shopping mall · Subang Jaya', icon: 'mall' },
-  { name: 'Bandar Tasik Selatan (TBS)', sub: 'Bus terminal & KTM · Kuala Lumpur', icon: 'train' },
-  { name: 'KLIA 2', sub: 'Airport · Sepang', icon: 'pin' },
-  { name: 'KLIA 1', sub: 'Airport · Sepang', icon: 'pin' },
-  { name: 'Cyberjaya', sub: 'Town · Selangor', icon: 'building' },
-  { name: 'Monash University Malaysia', sub: 'Campus · Bandar Sunway', icon: 'campus' },
-  { name: 'Taylor\'s University', sub: 'Campus · Subang Jaya', icon: 'campus' },
-  { name: 'University Malaya', sub: 'Campus · Kuala Lumpur', icon: 'campus' },
-];
+import { usePolling } from '@/hooks/use-polling';
+import { getMyBookings, getUpcomingRides, type Booking, type Ride } from '@/lib/api';
+import { formatDay, formatTime } from '@/lib/status';
 
 const INITIAL_RECENT = ['Nilai AEON Mall', 'INTI International University', 'KL Sentral'];
 const SAVED_PLACES = [
@@ -39,8 +22,19 @@ const SAVED_PLACES = [
 
 const TIME_SLOTS = ['Anytime', '6–9 AM', '9 AM–12', '12–5 PM', '5–8 PM'];
 
+/** The booking worth surfacing on Home: a live trip first, else the next confirmed/pending one. */
+function pickActiveBooking(bookings: Booking[]): Booking | null {
+  const live = bookings.find((b) => b.status === 'CONFIRMED' && b.rideStatus === 'IN_PROGRESS');
+  if (live) return live;
+  const soon = bookings
+    .filter((b) => (b.status === 'CONFIRMED' || b.status === 'PENDING') && b.departureTime)
+    .filter((b) => b.rideStatus === 'ACTIVE' || b.rideStatus === 'FULL')
+    .sort((a, b) => a.departureTime!.localeCompare(b.departureTime!));
+  return soon[0] ?? null;
+}
+
 export default function PassengerHomeScreen() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const insets = useSafeAreaInsets();
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
@@ -53,13 +47,24 @@ export default function PassengerHomeScreen() {
   const [scheduledTime, setScheduledTime] = useState<string | null>(null);
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
 
+  const [activeBooking, setActiveBooking] = useState<Booking | null>(null);
+  const [suggestedRides, setSuggestedRides] = useState<Ride[]>([]);
+
+  usePolling(async () => {
+    if (!token || user?.role === 'DRIVER') return;
+    const [bookings, upcoming] = await Promise.all([
+      getMyBookings(token).catch(() => [] as Booking[]),
+      getUpcomingRides(token).catch(() => [] as Ride[]),
+    ]);
+    setActiveBooking(pickActiveBooking(bookings));
+    setSuggestedRides(upcoming.slice(0, 3));
+  }, 20000);
+
   const displayName = user?.username || 'Wee';
   const shareMessage = 'Join me on INTI Ride — use code AIMAN5 for RM5 off your first ride! inti.ride/join/AIMAN5';
 
   const searchQuery = activeInput === 'pickup' ? pickup : destination;
-  const filteredLocations = searchQuery.trim() 
-    ? AVAILABLE_LOCATIONS.filter(loc => loc.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : [];
+  const filteredLocations = filterPlaces(searchQuery);
 
   const handleSelectLocation = (locName: string) => {
     if (activeInput === 'pickup') setPickup(locName);
@@ -120,6 +125,10 @@ export default function PassengerHomeScreen() {
       default: return <MapPin size={20} color="#9CA3AF" />;
     }
   };
+
+  if (user?.role === 'DRIVER') {
+    return <Redirect href="/(app)/driver" />;
+  }
 
   return (
     <View style={styles.root}>
@@ -225,23 +234,14 @@ export default function PassengerHomeScreen() {
           ))}
         </View>
 
-        <View style={styles.activeRideCard}>
-          <Avatar name="Siti Lim" size={44} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.activeRideLabel}>Your ride · Siti Lim</Text>
-            <Text style={styles.activeRideTitle}>Arrives in <Text style={{ color: '#EF4444' }}>4 min</Text></Text>
-            <Text style={styles.activeRideSub}>Myvi · VGX 2041</Text>
-          </View>
-          <Pressable style={styles.trackBtn} onPress={() => router.push('/(app)/tracking')}>
-            <Text style={styles.trackText}>Track</Text>
-          </Pressable>
-        </View>
+        {activeBooking ? <ActiveRideCard booking={activeBooking} /> : null}
 
-        <Text style={styles.sectionTitle}>Guess You Want To Go</Text>
-
-        <RideCard name="Max Verstappen" id="I25076676" time="09:35 AM" to="Nilai AEON Mall" rating="5.0" seats="1" />
-        <RideCard name="Kimi Antonelli" id="I25068688" time="10:45 AM" to="KL Sentral" rating="4.5" seats="2" />
-        <RideCard name="George Russell" id="I25076767" time="12:10 PM" to="KLIA 2" rating="5.0" seats="2" />
+        {suggestedRides.length > 0 ? (
+          <>
+            <Text style={styles.sectionTitle}>Rides leaving soon</Text>
+            {suggestedRides.map((ride) => <RideCard key={ride.id} ride={ride} />)}
+          </>
+        ) : null}
 
         <View style={styles.referCard}>
           <Gift size={24} color={Colors.light.text} strokeWidth={2} />
@@ -391,26 +391,58 @@ function RecentRow({ icon, title, subtitle, onPress }: { icon: any, title: strin
   );
 }
 
-function RideCard({ name, id, time, to, rating, seats }: any) {
+function ActiveRideCard({ booking }: { booking: Booking }) {
+  const live = booking.status === 'CONFIRMED' && booking.rideStatus === 'IN_PROGRESS';
+  const name = booking.driverName ?? 'Your driver';
+  return (
+    <View style={styles.activeRideCard}>
+      <Avatar name={name} size={44} />
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <Text style={styles.activeRideLabel}>Your ride · {name}</Text>
+        <Text style={styles.activeRideTitle} numberOfLines={1}>
+          {live ? (
+            <Text style={{ color: '#EF4444' }}>On the way</Text>
+          ) : (
+            `${formatDay(booking.departureTime)}, ${formatTime(booking.departureTime)}`
+          )}
+        </Text>
+        <Text style={styles.activeRideSub} numberOfLines={1}>
+          {booking.status === 'PENDING' ? 'Waiting for driver approval' : booking.vehicle ?? `To ${booking.destination}`}
+        </Text>
+      </View>
+      <Pressable
+        style={styles.trackBtn}
+        onPress={() =>
+          live
+            ? router.push({ pathname: '/(app)/tracking', params: { rideId: booking.rideId, bookingId: booking.id } })
+            : router.push({ pathname: '/(app)/booking-details', params: { bookingId: booking.id } })
+        }>
+        <Text style={styles.trackText}>{live ? 'Track' : 'View'}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function RideCard({ ride }: { ride: Ride }) {
   return (
     <View style={styles.grayCard}>
       <View style={styles.rideHeader}>
-        <Text style={styles.rideName}>{name}</Text>
-        <View style={styles.idBadge}><Text style={styles.idText}>{id}</Text></View>
+        <Text style={styles.rideName}>{ride.driverName ?? 'INTI driver'}</Text>
+        <View style={styles.idBadge}><Text style={styles.idText}>RM {ride.price.toFixed(2)}</Text></View>
       </View>
-      <Text style={styles.rideTime}>{time}</Text>
+      <Text style={styles.rideTime}>{formatTime(ride.departureTime)}</Text>
       <View style={styles.routeRow}>
         <View style={styles.smallRing} />
-        <Text style={styles.routeText}>INTI International University</Text>
+        <Text style={styles.routeText}>{ride.origin}</Text>
       </View>
       <View style={styles.routeLine} />
       <View style={styles.routeRow}>
         <MapPin size={12} color={Colors.light.primary} strokeWidth={2.5} />
-        <Text style={styles.routeText}>{to}</Text>
+        <Text style={styles.routeText}>{ride.destination}</Text>
       </View>
       <View style={styles.rideFooter}>
-        <Text style={styles.ratingText}>★ {rating} · {seats} seats available</Text>
-        <Pressable style={styles.viewDetailsBtn} onPress={() => router.push({ pathname: '/(app)/ride-details', params: { rideId: 1, origin: 'INTI International University', destination: to } })}>
+        <Text style={styles.ratingText}>{formatDay(ride.departureTime)} · {ride.seatsAvailable} seats available</Text>
+        <Pressable style={styles.viewDetailsBtn} onPress={() => router.push({ pathname: '/(app)/ride-details', params: { rideId: ride.id } })}>
           <Text style={styles.viewDetailsText}>View Details</Text>
         </Pressable>
       </View>

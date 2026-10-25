@@ -1,7 +1,7 @@
 import { Link, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Eye, EyeOff, Settings } from 'lucide-react-native';
-import { useState } from 'react';
+import { Eye, EyeOff, Fingerprint, Settings } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BrandMark } from '@/components/brand-mark';
 import { useAuth } from '@/context/auth';
 import { ApiError } from '@/lib/api';
+import { getBiometricSupport, type BiometricSupport } from '@/lib/biometrics';
 
 /* ---------- Design tokens ---------- */
 const PAGE_BG = '#EFEFEF';
@@ -27,12 +28,39 @@ const TEXT_MUTED = '#5A5A5A';
 const RED = '#D0342B';
 
 export default function LoginScreen() {
-  const { signIn } = useAuth();
+  const { signIn, signInWithBiometrics, biometricLoginEnabled, biometricEmail } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [bioSupport, setBioSupport] = useState<BiometricSupport | null>(null);
+  const [bioLoading, setBioLoading] = useState(false);
+
+  useEffect(() => {
+    void getBiometricSupport().then(setBioSupport);
+  }, []);
+
+  async function onBiometricLogin() {
+    setError(null);
+    if (!bioSupport?.available) {
+      setError(bioSupport?.reason ?? 'Biometrics are not available on this device.');
+      return;
+    }
+    if (!biometricLoginEnabled) {
+      setError(`Log in with your password once, then turn on ${bioSupport.label} login in Settings.`);
+      return;
+    }
+    setBioLoading(true);
+    try {
+      await signInWithBiometrics();
+      router.replace('/(app)');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Biometric login failed.');
+    } finally {
+      setBioLoading(false);
+    }
+  }
 
   async function onSubmit() {
     setError(null);
@@ -157,9 +185,18 @@ export default function LoginScreen() {
               <Pressable style={styles.outlineBtn}>
                 <Text style={styles.outlineText}>Continue with INTI SSO</Text>
               </Pressable>
-              <Pressable style={styles.outlineBtn}>
-                <Text style={styles.outlineText}>Use biometrics</Text>
+              <Pressable
+                style={[styles.outlineBtn, styles.bioBtn, bioLoading && { opacity: 0.6 }]}
+                onPress={onBiometricLogin}
+                disabled={bioLoading}>
+                <Fingerprint size={18} color={TEXT_DARK} strokeWidth={2.2} />
+                <Text style={styles.outlineText}>
+                  {bioLoading ? 'Checking…' : `Use ${bioSupport?.label ?? 'biometrics'}`}
+                </Text>
               </Pressable>
+              {biometricLoginEnabled && biometricEmail ? (
+                <Text style={styles.bioHint}>Signs in as {biometricEmail}</Text>
+              ) : null}
             </View>
 
             {/* Footer */}
@@ -201,6 +238,17 @@ function BottomIllustration() {
 }
 
 const styles = StyleSheet.create({
+  bioBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  bioHint: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: TEXT_MUTED,
+    marginTop: -4,
+  },
   safe: { flex: 1, backgroundColor: PAGE_BG },
   flex: { flex: 1 },
   scroll: {
