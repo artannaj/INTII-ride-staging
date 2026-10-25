@@ -1,232 +1,197 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, CreditCard, CheckCircle2 } from 'lucide-react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Modal, ScrollView } from 'react-native';
+import { Star, ShieldCheck, ChevronDown, Check } from 'lucide-react-native';
 
-import { Badge, Button, Card, ScreenHeader } from '@/components';
+import { AppHeader } from '@/components/app-header'; // <-- Use the perfect header
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
-import { ApiError, createBooking, searchRides, type Ride } from '@/lib/api';
+import { getRideById, createBooking, type Ride } from '@/lib/api';
 
 export default function ConfirmBookingScreen() {
+  const { rideId } = useLocalSearchParams<{ rideId: string }>();
   const { token, user } = useAuth();
-  const params = useLocalSearchParams<{ rideId?: string }>();
   
   const [ride, setRide] = useState<Ride | null>(null);
-  const [seats, setSeats] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  
+  const [isToday, setIsToday] = useState(false);
+  const [selectedWindow, setSelectedWindow] = useState('On time');
+  const [showWindowModal, setShowWindowModal] = useState(false);
 
   useEffect(() => {
-    if (!token || !params.rideId) return;
-    searchRides(token, 'INTI International University', 'Nilai AEON Mall')
-      .then((rides) => {
-        const found = rides.find((r) => r.id === Number(params.rideId));
-        if (found) setRide(found);
+    if (!token || !rideId) return;
+    getRideById(token, Number(rideId))
+      .then((data: Ride) => {
+        setRide(data);
+        const rideDate = new Date(data.departureTime);
+        const today = new Date();
+        setIsToday(rideDate.toDateString() === today.toDateString());
       })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Error loading ride.'));
-  }, [token, params.rideId]);
+      .catch((err: any) => Alert.alert('Error', 'Could not load ride details.'))
+      .finally(() => setLoading(false));
+  }, [token, rideId]);
 
-  async function onConfirm() {
+  const handleRequestSeat = async () => {
     if (!token || !ride) return;
-    setLoading(true);
-    setError(null);
     try {
-      await createBooking(token, { rideId: ride.id, seatsBooked: seats });
-      // Redirect to bookings page after success
-      router.replace('/(app)/bookings');
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Booking failed.');
-    } finally {
-      setLoading(false);
+      await createBooking(token, { rideId: ride.id, seatsBooked: 1 }); 
+      
+      Alert.alert(
+        'Request Sent!', 
+        'Your seat request has been sent to the driver. You will be able to track them once they approve your booking.', 
+        [{ text: 'OK', onPress: () => router.replace('/(app)') }]
+      );
+      
+    } catch (error: any) {
+      Alert.alert('Booking Failed', error.message || 'Could not book this ride.');
     }
+  };
+
+  if (loading || !ride) {
+    return (
+      <View style={styles.root}>
+        <AppHeader title="Confirm Booking" />
+        <ActivityIndicator size="large" color={Colors.light.primary} style={{ flex: 1, marginTop: 40 }} />
+      </View>
+    );
   }
 
-  if (!ride) return <SafeAreaView style={styles.safe}><Text style={{textAlign:'center', marginTop: 40}}>Loading...</Text></SafeAreaView>;
+  const date = new Date(ride.departureTime);
+  const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateString = date.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
+  const passengerName = user?.username || 'Passenger';
 
-  const serviceFee = 0.50;
-  const total = (ride.price * seats) + serviceFee;
+  const TIME_WINDOWS = ['15 mins before', '10 mins before', '5 mins before', 'On time'];
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <StatusBar style="light" />
-      
-      {/* Red Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.5} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Confirm Booking</Text>
-          <View style={styles.backBtn} />
-        </View>
-      </View>
+    <View style={styles.root}>
+      <AppHeader title="Confirm Booking" />
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         
         {/* Driver Card */}
-        <Card style={styles.driverCard}>
-          <View style={{flex: 1}}>
-            <Text style={styles.label}>Driver:</Text>
-            <Text style={styles.driverName}>Max Verstappen</Text>
-          </View>
-          <View style={{alignItems: 'flex-end', gap: 4}}>
-            <Badge label="‚úĒ Verified Driver" variant="success" />
-            <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
-              <Text style={{color:'#FACC15'}}>‚ėÖ</Text>
-              <Text style={{fontWeight:'800'}}>5.0</Text>
+        <View style={styles.card}>
+          <View style={styles.driverRow}>
+            <View>
+              <Text style={styles.label}>Driver:</Text>
+              <Text style={styles.driverName}>{ride.driverName}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end', gap: 6 }}>
+              <View style={styles.verifiedBadge}>
+                <ShieldCheck size={14} color="#10B981" />
+                <Text style={styles.verifiedText}>Verified Driver</Text>
+              </View>
+              <View style={styles.ratingBadge}>
+                <Star size={16} color="#F59E0B" fill="#F59E0B" />
+                <Text style={styles.ratingText}>5.0</Text>
+              </View>
             </View>
           </View>
-        </Card>
+        </View>
 
         {/* Booking Summary */}
-        <Card style={styles.summaryCard}>
+        <View style={styles.card}>
           <Text style={styles.cardTitle}>Booking Summary</Text>
           
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Ride</Text>
-            <Text style={styles.rowValue}>{ride.origin} ‚Üí {ride.destination}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Date</Text>
-            <Text style={styles.rowValue}>{new Date(ride.departureTime).toLocaleDateString()}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Departure</Text>
-            <Text style={styles.rowValue}>{new Date(ride.departureTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Passenger</Text>
-            <Text style={styles.rowValue}>{user?.username || 'Passenger'} ({seats} Seat)</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Contribution</Text>
-            <Text style={[styles.rowValue, {color: Colors.light.primary}]}>RM {ride.price.toFixed(2)}</Text>
-          </View>
-
-          {/* Seat Counter */}
-          <View style={styles.seatRow}>
-            <Text style={styles.rowLabel}>Seats</Text>
-            <View style={styles.seatControl}>
-              <Pressable style={styles.seatBtn} onPress={() => setSeats(Math.max(1, seats - 1))}>
-                <Text style={styles.seatBtnText}>-</Text>
-              </Pressable>
-              <Text style={styles.seatNum}>{seats}</Text>
-              <Pressable style={styles.seatBtn} onPress={() => setSeats(Math.min(ride.seatsAvailable, seats + 1))}>
-                <Text style={styles.seatBtnText}>+</Text>
-              </Pressable>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Ride:</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.detailValue}>{ride.origin}</Text>
+              <Text style={styles.detailValue}>→ {ride.destination}</Text>
             </View>
           </View>
-        </Card>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Date:</Text>
+            <Text style={styles.detailValue}>{dateString}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Departure:</Text>
+            <Text style={styles.detailValue}>{timeString}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Passenger:</Text>
+            <Text style={styles.detailValue}>{passengerName} (1 Seat)</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Contribution:</Text>
+            <Text style={styles.detailValue}>RM {ride.price.toFixed(2)}</Text>
+          </View>
+        </View>
 
-        {/* Payment Method */}
-        <Card style={styles.payCard}>
-          <View style={styles.payIcon}><CreditCard size={20} color={Colors.light.primary} /></View>
-          <View style={{flex: 1}}>
-            <Text style={styles.label}>Payment method</Text>
-            <Text style={styles.payText}>Visa ‚ÄĘ‚ÄĘ‚ÄĘ‚ÄĘ 4821</Text>
-            <Text style={styles.paySub}>Expires 08/28</Text>
+        {/* Schedule Window - ONLY SHOWS IF TODAY */}
+        {isToday && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Departure Window</Text>
+            <Text style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>
+              When should the driver expect you?
+            </Text>
+            <Pressable style={styles.dropdownBtn} onPress={() => setShowWindowModal(true)}>
+              <Text style={styles.dropdownText}>{selectedWindow}</Text>
+              <ChevronDown size={20} color="#374151" />
+            </Pressable>
           </View>
-          <Pressable style={styles.changeBtn}><Text style={styles.changeText}>Change</Text></Pressable>
-        </Card>
+        )}
 
-        {/* Promo Code */}
-        <Card style={styles.promoCard}>
-          <View style={styles.promoInputWrap}>
-            <TextInput placeholder="Promo code (try INTI10)" placeholderTextColor="#9CA3AF" style={styles.promoInput} />
-          </View>
-          <Pressable style={styles.applyBtn}><Text style={styles.applyText}>Apply</Text></Pressable>
-        </Card>
-
-        {/* Fare Breakdown */}
-        <Card style={styles.fareCard}>
-          <Text style={styles.cardTitle}>Fare breakdown</Text>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Fare (RM {ride.price.toFixed(2)} √ó {seats})</Text>
-            <Text style={styles.rowValue}>RM {(ride.price * seats).toFixed(2)}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Service fee</Text>
-            <Text style={styles.rowValue}>RM {serviceFee.toFixed(2)}</Text>
-          </View>
-          <View style={[styles.row, styles.totalRow]}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>RM {total.toFixed(2)}</Text>
-          </View>
-        </Card>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {/* Ride Note */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Ride Note</Text>
+          <Text style={styles.noteText}>• {ride.note || 'No special notes provided.'}</Text>
+        </View>
       </ScrollView>
 
-      {/* Bottom CTA */}
-      <View style={styles.cta}>
-        <Pressable style={styles.confirmBtn} onPress={onConfirm} disabled={loading}>
-          <Text style={styles.confirmText}>
-            {loading ? 'Requesting...' : `Request Seat ¬∑ RM ${total.toFixed(2)}`}
-          </Text>
+      <View style={styles.footer}>
+        <Pressable style={styles.requestBtn} onPress={handleRequestSeat}>
+          <Text style={styles.requestBtnText}>Request Seat</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+
+      <Modal visible={showWindowModal} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowWindowModal(false)}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Select Window</Text>
+            {TIME_WINDOWS.map((win) => (
+              <Pressable 
+                key={win} 
+                style={styles.windowOption}
+                onPress={() => { setSelectedWindow(win); setShowWindowModal(false); }}
+              >
+                <Text style={styles.windowText}>{win}</Text>
+                {selectedWindow === win && <Check size={20} color="#10B981" />}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+
+    </View>
   );
 }
 
-// Added missing import for TextInput
-import { TextInput } from 'react-native';
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#EFEFEF' },
-  header: {
-    backgroundColor: Colors.light.primary,
-    paddingTop: 60,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-  },
-  headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backBtn: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 18, color: '#FFFFFF', fontWeight: '800' },
-  
-  scroll: { flex: 1 },
-  scrollContent: { padding: 16, gap: 16, paddingBottom: 100 },
-
-  driverCard: { flexDirection: 'row', alignItems: 'center', padding: 16 },
-  label: { fontSize: 12, color: Colors.light.textSecondary, marginBottom: 2 },
-  driverName: { fontSize: 18, fontWeight: '800', color: Colors.light.text },
-
-  summaryCard: { padding: 16, gap: 10 },
-  cardTitle: { fontSize: 14, fontWeight: '800', color: Colors.light.text, marginBottom: 4 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  rowLabel: { fontSize: 13, color: Colors.light.textSecondary },
-  rowValue: { fontSize: 13, fontWeight: '700', color: Colors.light.text, textAlign: 'right', flex: 1, marginLeft: 16 },
-  
-  seatRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  seatControl: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  seatBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  seatBtnText: { fontSize: 18, fontWeight: '600', color: Colors.light.text },
-  seatNum: { fontSize: 16, fontWeight: '800', color: Colors.light.text },
-
-  payCard: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
-  payIcon: { width: 40, height: 40, borderRadius: 8, backgroundColor: '#FDEBEC', alignItems: 'center', justifyContent: 'center' },
-  payText: { fontSize: 14, fontWeight: '700', color: Colors.light.text },
-  paySub: { fontSize: 11, color: Colors.light.textSecondary },
-  changeBtn: { padding: 8 },
-  changeText: { fontSize: 12, fontWeight: '700', color: Colors.light.primary },
-
-  promoCard: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 },
-  promoInputWrap: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 },
-  promoInput: { fontSize: 13, color: Colors.light.text },
-  applyBtn: { backgroundColor: Colors.light.primary, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8 },
-  applyText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
-
-  fareCard: { padding: 16, gap: 8 },
-  totalRow: { marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  totalLabel: { fontSize: 16, fontWeight: '800', color: Colors.light.text },
-  totalValue: { fontSize: 16, fontWeight: '800', color: Colors.light.primary },
-
-  error: { color: Colors.light.primary, textAlign: 'center', fontSize: 13, marginTop: 8 },
-
-  cta: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', padding: 16, paddingBottom: 32, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
-  confirmBtn: { backgroundColor: '#E69996', paddingVertical: 16, borderRadius: 14, alignItems: 'center' }, // Faded red like the prototype
-  confirmText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  root: { flex: 1, backgroundColor: '#D1D5DB' },
+  scrollContent: { padding: 16, gap: 16 },
+  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16 },
+  driverRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  label: { fontSize: 16, fontWeight: '800', color: '#111827' },
+  driverName: { fontSize: 18, fontWeight: '800', color: '#111827', marginTop: 4 },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  verifiedText: { fontSize: 12, fontWeight: '700', color: '#10B981' },
+  ratingBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ratingText: { fontSize: 16, fontWeight: '800', color: '#374151' },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: 12 },
+  detailRow: { flexDirection: 'row', marginBottom: 12 },
+  detailLabel: { width: 100, fontSize: 14, fontWeight: '800', color: '#111827' },
+  detailValue: { flex: 1, fontSize: 14, fontWeight: '500', color: '#4B5563' },
+  dropdownBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F3F4F6', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB' },
+  dropdownText: { fontSize: 16, fontWeight: '600', color: '#111827' },
+  noteText: { fontSize: 14, color: '#4B5563', lineHeight: 20 },
+  footer: { padding: 16, backgroundColor: '#D1D5DB' },
+  requestBtn: { backgroundColor: '#EF4444', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
+  requestBtnText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalSheet: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, width: '80%' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 16, textAlign: 'center' },
+  windowOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  windowText: { fontSize: 16, fontWeight: '600', color: '#374151' },
 });

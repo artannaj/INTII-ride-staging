@@ -1,208 +1,218 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, MessageCircle, Phone, Share, Circle, MapPin, Upload } from 'lucide-react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { Star, ShieldCheck, Clock, MapPin, CheckCircle2, XCircle, CalendarClock } from 'lucide-react-native';
 
-import { Avatar, Badge, Card } from '@/components';
+import { AppHeader } from '@/components/app-header';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
-import { ApiError, getMyBookings, type Booking } from '@/lib/api';
+import { getBooking, type Booking } from '@/lib/api';
 
 export default function BookingDetailsScreen() {
-  const { token, user } = useAuth();
-  const params = useLocalSearchParams<{ bookingId?: string }>();
+  const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
+  const { token } = useAuth();
+  
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!token || !params.bookingId) return;
-    getMyBookings(token).then((bookings) => {
-      const found = bookings.find(b => b.id === Number(params.bookingId));
-      if (found) setBooking(found);
-    }).catch(() => {});
-  }, [token, params.bookingId]);
+    if (!token || !bookingId) return;
+    getBooking(token, Number(bookingId))
+      .then((data: Booking) => setBooking(data))
+      .catch((err: any) => Alert.alert('Error', 'Could not load booking details.'))
+      .finally(() => setLoading(false));
+  }, [token, bookingId]);
 
-  if (!booking) return <SafeAreaView style={styles.safe}><Text style={{textAlign:'center', marginTop: 40}}>Loading...</Text></SafeAreaView>;
+  if (loading || !booking) {
+    return (
+      <View style={styles.root}>
+        <AppHeader title="Booking Details" />
+        <ActivityIndicator size="large" color={Colors.light.primary} style={{ flex: 1, marginTop: 40 }} />
+      </View>
+    );
+  }
+
+  const date = booking.departureTime ? new Date(booking.departureTime) : new Date();
+  const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateString = date.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  
+  const now = new Date().getTime();
+  const rideTime = date.getTime();
+  const diffInHours = (rideTime - now) / (1000 * 60 * 60);
+  const isWithinOneHour = diffInHours <= 1 && diffInHours > -1;
+  
+  const isPending = booking.status === 'PENDING';
+  const isCancelled = booking.status === 'CANCELLED' || booking.status === 'REJECTED';
+  const isConfirmed = booking.status === 'CONFIRMED';
+
+  const showTrackButton = isConfirmed && isWithinOneHour;
+  const showFutureStatus = isConfirmed && !isWithinOneHour;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <StatusBar style="light" />
-      
-      {/* Red Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.5} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Booking Details</Text>
-          <Pressable style={styles.backBtn}>
-            <Upload size={20} color="#FFFFFF" />
-          </Pressable>
-        </View>
-      </View>
+    <View style={styles.root}>
+      <AppHeader title="Booking Details" />
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         
-        {/* Status Card */}
-        <Card style={styles.statusCard}>
-          <Text style={styles.label}>Booking Status:</Text>
-          <Text style={styles.statusTitle}>‚Ź≥ Pending Driver Approval</Text>
-          
-          <View style={styles.progressBar}>
-            <View style={[styles.progressDot, styles.progressDotActive]} />
-            <View style={[styles.progressLine, styles.progressLineActive]} />
-            <View style={styles.progressDot} />
-            <View style={styles.progressLine} />
-            <View style={styles.progressDot} />
+        {isPending && (
+          <View style={[styles.statusBanner, { backgroundColor: '#FEF3C7' }]}>
+            <Clock size={20} color="#D97706" />
+            <Text style={[styles.statusBannerText, { color: '#D97706' }]}>
+              Waiting for driver to approve your request
+            </Text>
           </View>
-          <View style={styles.progressLabels}>
-            <Text style={styles.progressTextActive}>Requested</Text>
-            <Text style={styles.progressText}>Accepted</Text>
-            <Text style={styles.progressText}>Pickup</Text>
+        )}
+        {isCancelled && (
+          <View style={[styles.statusBanner, { backgroundColor: '#FEE2E2' }]}>
+            <XCircle size={20} color="#EF4444" />
+            <Text style={[styles.statusBannerText, { color: '#EF4444' }]}>
+              This booking has been cancelled
+            </Text>
           </View>
-        </Card>
-
-        {/* Info Card */}
-        <Card style={styles.infoCard}>
-          <Text style={styles.cardTitle}>Booking Information</Text>
-          <Row label="Booking ID:" value={`BKG-${booking.id}260929`} />
-          <Row label="Passenger:" value={`${user?.username || 'Passenger'} (${booking.seatsBooked} Seat)`} />
-          <Row label="Booked On:" value={new Date(booking.createdAt).toLocaleString()} />
-        </Card>
-
-        {/* Ride Card */}
-        <Card style={styles.rideCard}>
-          <Text style={styles.cardTitle}>Ride Information</Text>
-          
-          <View style={styles.driverRow}>
-            <Avatar name="Max Verstappen" size={44} />
-            <View style={{flex: 1}}>
-              <Text style={styles.driverName}>Max Verstappen</Text>
-              <Text style={styles.carName}>Aston Martin Valkyrie ¬∑ MY6767</Text>
-            </View>
-            <View style={styles.matricBadge}><Text style={styles.matricText}>I25076676</Text></View>
+        )}
+        {showFutureStatus && (
+          <View style={[styles.statusBanner, { backgroundColor: '#EFF6FF' }]}>
+            <CalendarClock size={20} color="#3B82F6" />
+            <Text style={[styles.statusBannerText, { color: '#3B82F6' }]}>
+              Your ride is scheduled for {dateString}
+            </Text>
           </View>
+        )}
+        {showTrackButton && (
+          <View style={[styles.statusBanner, { backgroundColor: '#ECFDF5' }]}>
+            <CheckCircle2 size={20} color="#10B981" />
+            <Text style={[styles.statusBannerText, { color: '#10B981' }]}>
+              Your driver is confirmed and on the way!
+            </Text>
+          </View>
+        )}
 
-          <Row label="Departure:" value={new Date(booking.createdAt).toLocaleString()} />
-          
-          <View style={styles.routeWrap}>
-            <View style={styles.routeRow}>
-              <Circle size={12} color={Colors.light.text} strokeWidth={3} />
-              <Text style={styles.routeText}>INTI International University</Text>
-            </View>
-            <View style={styles.routeLine} />
-            <View style={styles.routeRow}>
-              <MapPin size={14} color={Colors.light.primary} strokeWidth={2.5} />
-              <Text style={styles.routeText}>Nilai AEON Mall</Text>
+        <View style={styles.driverCard}>
+          <View style={styles.avatarPlaceholder}>
+             <Text style={styles.avatarText}>{booking.driverName?.charAt(0) || 'D'}</Text>
+          </View>
+          <View style={styles.driverInfo}>
+            <Text style={styles.driverName}>{booking.driverName || 'Driver'}</Text>
+            <View style={styles.verifiedBadge}>
+              <ShieldCheck size={14} color="#10B981" />
+              <Text style={styles.verifiedText}>Verified Driver</Text>
             </View>
           </View>
-        </Card>
-
-        {/* Action Buttons */}
-        <View style={styles.actionRow}>
-          <Pressable style={styles.actionBtn}>
-            <MessageCircle size={20} color={Colors.light.primary} />
-            <Text style={styles.actionText}>Chat</Text>
-          </Pressable>
-          <Pressable style={styles.actionBtn}>
-            <Phone size={20} color={Colors.light.primary} />
-            <Text style={styles.actionText}>Call</Text>
-          </Pressable>
-          <Pressable style={styles.actionBtn}>
-            <Share size={20} color={Colors.light.primary} />
-            <Text style={styles.actionText}>Share</Text>
-          </Pressable>
+          <View style={styles.ratingBadge}>
+            <Star size={16} color="#F59E0B" fill="#F59E0B" />
+            <Text style={styles.ratingText}>5.0</Text>
+          </View>
         </View>
 
-        {/* Payment Card */}
-        <Card style={styles.payCard}>
-          <Text style={styles.cardTitle}>Payment</Text>
-          <Row label="Contribution:" value={`RM ${(booking.totalPrice - 0.50).toFixed(2)}`} />
-          <Row label="Service fee:" value="RM 0.50" />
-          <Row label="Payment Method:" value="Visa ‚ÄĘ‚ÄĘ‚ÄĘ‚ÄĘ 4821" />
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>RM {booking.totalPrice.toFixed(2)}</Text>
+        <View style={styles.card}>
+          <View style={styles.timeRow}>
+            <Text style={styles.timeText}>{timeString}</Text>
+            <Text style={styles.dateText}>{dateString}</Text>
           </View>
-        </Card>
+
+          <View style={styles.routeContainer}>
+            <View style={styles.routeLine} />
+            <View style={styles.routeItem}>
+              <View style={styles.dotStart} />
+              <Text style={styles.routeText}>{booking.origin}</Text>
+            </View>
+            <View style={styles.routeItem}>
+              <View style={styles.dotEnd} />
+              <Text style={styles.routeText}>{booking.destination}</Text>
+            </View>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Passenger:</Text>
+            <Text style={styles.detailValue}>{booking.passengerName || 'You'}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Seats Booked:</Text>
+            <Text style={styles.detailValue}>{booking.seatsBooked}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Total Contribution:</Text>
+            <Text style={styles.detailValue}>RM {booking.totalPrice.toFixed(2)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Vehicle</Text>
+          <View style={styles.vehicleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.vehicleName}>{booking.vehicle?.split('·')[0] || 'Car'}</Text>
+              <Text style={styles.vehicleDetail}>Color: {booking.vehicle?.split('·')[1] || 'Unknown'}</Text>
+              <Text style={styles.vehicleDetail}>Plate: {booking.vehicle?.split('·')[2] || 'Unknown'}</Text>
+            </View>
+            <View style={styles.vehicleImagePlaceholder}>
+              <Text style={{ fontSize: 40 }}>🚗</Text>
+            </View>
+          </View>
+        </View>
+
       </ScrollView>
 
-      {/* Bottom CTA */}
-      <View style={styles.cta}>
-        <Pressable style={styles.cancelBtn} onPress={() => router.back()}>
-          <Text style={styles.cancelText}>Cancel Request</Text>
-        </Pressable>
+      <View style={styles.footer}>
+        {showTrackButton ? (
+          <Pressable 
+            style={styles.trackBtn}
+            onPress={() => router.push({ 
+              pathname: '/(app)/tracking', 
+              params: { rideId: booking.rideId, bookingId: booking.id } 
+            })}
+          >
+            <Text style={styles.trackBtnText}>Track Driver</Text>
+          </Pressable>
+        ) : showFutureStatus ? (
+          <View style={[styles.trackBtn, { backgroundColor: '#E5E7EB' }]}>
+            <Text style={[styles.trackBtnText, { color: '#6B7280' }]}>Tracking available 1hr before departure</Text>
+          </View>
+        ) : isPending ? (
+          <View style={[styles.trackBtn, { backgroundColor: '#E5E7EB' }]}>
+            <Text style={[styles.trackBtnText, { color: '#6B7280' }]}>Pending Approval</Text>
+          </View>
+        ) : null}
       </View>
-    </SafeAreaView>
-  );
-}
-
-function Row({ label, value }: { label: string, value: string }) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#EFEFEF' },
-  header: {
-    backgroundColor: Colors.light.primary,
-    paddingTop: 60,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-  },
-  headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backBtn: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 18, color: '#FFFFFF', fontWeight: '800' },
-  
-  scroll: { flex: 1 },
-  scrollContent: { padding: 16, gap: 16, paddingBottom: 100 },
-
-  label: { fontSize: 12, color: Colors.light.textSecondary, marginBottom: 4 },
-  cardTitle: { fontSize: 14, fontWeight: '800', color: Colors.light.text, marginBottom: 12 },
-
-  statusCard: { padding: 16 },
-  statusTitle: { fontSize: 18, fontWeight: '800', color: Colors.light.text, marginBottom: 16 },
-  progressBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  progressDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#E5E7EB' },
-  progressDotActive: { backgroundColor: Colors.light.primary },
-  progressLine: { flex: 1, height: 2, backgroundColor: '#E5E7EB' },
-  progressLineActive: { backgroundColor: Colors.light.primary },
-  progressLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  progressText: { fontSize: 10, color: '#9CA3AF', fontWeight: '600' },
-  progressTextActive: { fontSize: 10, color: Colors.light.text, fontWeight: '800' },
-
-  infoCard: { padding: 16, gap: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  rowLabel: { fontSize: 12, color: Colors.light.textSecondary },
-  rowValue: { fontSize: 12, fontWeight: '600', color: Colors.light.text },
-
-  rideCard: { padding: 16, gap: 12 },
-  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  driverName: { fontSize: 14, fontWeight: '800', color: Colors.light.text },
-  carName: { fontSize: 11, color: Colors.light.textSecondary },
-  matricBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  matricText: { fontSize: 10, fontWeight: '700', color: Colors.light.textSecondary },
-  
-  routeWrap: { marginTop: 8, gap: 4 },
-  routeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  routeText: { fontSize: 12, fontWeight: '600', color: Colors.light.text },
-  routeLine: { height: 16, width: 1, backgroundColor: '#D1D5DB', marginLeft: 5 },
-
-  actionRow: { flexDirection: 'row', gap: 8 },
-  actionBtn: { flex: 1, backgroundColor: '#FFFFFF', paddingVertical: 12, borderRadius: 12, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#E5E7EB' },
-  actionText: { fontSize: 12, fontWeight: '700', color: Colors.light.primary },
-
-  payCard: { padding: 16, gap: 8 },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  totalLabel: { fontSize: 14, fontWeight: '800', color: Colors.light.text },
-  totalValue: { fontSize: 16, fontWeight: '800', color: Colors.light.primary },
-
-  cta: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', padding: 16, paddingBottom: 32, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
-  cancelBtn: { backgroundColor: '#FFFFFF', paddingVertical: 16, borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
-  cancelText: { color: Colors.light.primary, fontSize: 16, fontWeight: '800' },
+  root: { flex: 1, backgroundColor: '#D1D5DB' },
+  scrollContent: { padding: 16, gap: 16 },
+  statusBanner: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, gap: 12 },
+  statusBannerText: { flex: 1, fontSize: 14, fontWeight: '700' },
+  driverCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E5E7EB', borderRadius: 16, padding: 16 },
+  avatarPlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#9CA3AF', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  avatarText: { fontSize: 24, fontWeight: '800', color: '#FFF' },
+  driverInfo: { flex: 1 },
+  driverName: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  verifiedText: { fontSize: 12, fontWeight: '600', color: '#10B981' },
+  ratingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, gap: 4 },
+  ratingText: { fontSize: 14, fontWeight: '800', color: '#374151' },
+  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16 },
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  timeText: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  dateText: { fontSize: 15, fontWeight: '600', color: '#6B7280' },
+  routeContainer: { position: 'relative', marginBottom: 16, paddingLeft: 20 },
+  routeLine: { position: 'absolute', left: 5, top: 10, bottom: 10, width: 2, backgroundColor: '#9CA3AF' },
+  routeItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  dotStart: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#111827', backgroundColor: '#FFF', position: 'absolute', left: -20 },
+  dotEnd: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#111827', position: 'absolute', left: -20 },
+  routeText: { fontSize: 15, fontWeight: '500', color: '#111827', flex: 1 },
+  divider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 16 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  detailLabel: { fontSize: 14, fontWeight: '700', color: '#374151' },
+  detailValue: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: 8 },
+  vehicleRow: { flexDirection: 'row', alignItems: 'center' },
+  vehicleName: { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: 4 },
+  vehicleDetail: { fontSize: 14, color: '#4B5563', marginBottom: 2 },
+  vehicleImagePlaceholder: { width: 100, height: 60, backgroundColor: '#F3F4F6', borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  footer: { padding: 16, backgroundColor: '#D1D5DB' },
+  trackBtn: { backgroundColor: '#EF4444', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
+  trackBtnText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
 });

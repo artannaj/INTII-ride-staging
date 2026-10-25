@@ -3,15 +3,14 @@ import { StatusBar } from 'expo-status-bar';
 import { Share2, User, Wallet } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppHeader } from '@/components/app-header'; // <-- Use the perfect header
 import {
     Button,
     MenuRow,
     ScreenScroll,
     SectionGroup,
 } from '@/components';
-import { ScreenHeader } from '@/components/screen-header';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { ApiError, getReferrals, type ReferralSummary } from '@/lib/api';
@@ -57,9 +56,9 @@ export default function ReferScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar style="dark" />
-      <ScreenHeader title="Refer & earn" showBack />
+    <View style={styles.safe}>
+      <StatusBar style="light" />
+      <AppHeader title="Refer & earn" />
 
       <ScreenScroll>
         {/* Hero card */}
@@ -131,7 +130,7 @@ export default function ReferScreen() {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScreenScroll>
-    </SafeAreaView>
+    </View>
   );
 }
 
