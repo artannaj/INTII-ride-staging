@@ -84,6 +84,12 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar style="dark" />
+      
+      {/* 🛠️ BOTTOM ILLUSTRATION IS NOW ABSOLUTE POSITIONED BEHIND THE SCROLLVIEW */}
+      <View style={styles.illustrationContainer} pointerEvents="none">
+        <BottomIllustration />
+      </View>
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -181,10 +187,7 @@ export default function LoginScreen() {
                 <View style={styles.line} />
               </View>
 
-              {/* SSO + Biometrics */}
-              <Pressable style={styles.outlineBtn}>
-                <Text style={styles.outlineText}>Continue with INTI SSO</Text>
-              </Pressable>
+              {/* Biometrics Only */}
               <Pressable
                 style={[styles.outlineBtn, styles.bioBtn, bioLoading && { opacity: 0.6 }]}
                 onPress={onBiometricLogin}
@@ -207,9 +210,8 @@ export default function LoginScreen() {
               </Link>
             </View>
 
-            {/* Bottom illustration */}
-            <View style={styles.spacer} />
-            <BottomIllustration />
+            {/* Extra space at the bottom of the scroll so you can scroll past the illustration if needed */}
+            <View style={{ height: 180 }} />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -219,20 +221,27 @@ export default function LoginScreen() {
 
 function BottomIllustration() {
   return (
-    <View style={styles.illustration} pointerEvents="none">
-      <View style={[styles.tree, { left: '4%', bottom: 40 }]}>
-        <View style={[styles.treeCanopy, { backgroundColor: '#D77A8A', width: 60, height: 60, borderRadius: 30 }]} />
-        <View style={[styles.treeTrunk, { left: 27 }]} />
-      </View>
-      <View style={[styles.tree, { left: '62%', bottom: 55 }]}>
-        <View style={[styles.treeCanopy, { backgroundColor: '#B8651F', width: 46, height: 46, borderRadius: 23 }]} />
-        <View style={[styles.treeTrunk, { left: 20 }]} />
-      </View>
-      <View style={[styles.tree, { left: '82%', bottom: 40 }]}>
-        <View style={[styles.treeCanopy, { backgroundColor: '#D06B2C', width: 54, height: 54, borderRadius: 27 }]} />
-        <View style={[styles.treeTrunk, { left: 24 }]} />
-      </View>
+    <View style={styles.scene}>
+      {/* Hill */}
       <View style={styles.hill} />
+
+      {/* Pink Tree (Left) */}
+      <View style={[styles.tree, { left: '5%', bottom: 20 }]}>
+        <View style={[styles.treeTop, { backgroundColor: '#D77A8A', width: 100, height: 100, borderRadius: 50 }]} />
+        <View style={styles.treeTrunk} />
+      </View>
+
+      {/* Brown/Orange Tree (Middle Right) */}
+      <View style={[styles.tree, { right: '30%', bottom: 30 }]}>
+        <View style={[styles.treeTop, { backgroundColor: '#B8651F', width: 70, height: 70, borderRadius: 35 }]} />
+        <View style={styles.treeTrunk} />
+      </View>
+
+      {/* Orange Tree (Far Right) */}
+      <View style={[styles.tree, { right: '5%', bottom: 10 }]}>
+        <View style={[styles.treeTop, { backgroundColor: '#D06B2C', width: 65, height: 65, borderRadius: 32.5 }]} />
+        <View style={styles.treeTrunk} />
+      </View>
     </View>
   );
 }
@@ -374,30 +383,42 @@ const styles = StyleSheet.create({
   },
   footerText: { fontSize: 14, color: '#3A3A3A' },
   link: { fontSize: 14, fontWeight: '700', color: RED },
-  spacer: { flex: 1, minHeight: 20 },
-  illustration: {
-    height: 220,
-    width: '120%',
-    marginLeft: '-10%',
-    marginTop: 16,
+
+  /* 🛠️ NEW ILLUSTRATION STYLES */
+  illustrationContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 160, // Fixed height so it doesn't interfere with the layout
+    zIndex: -1, // Puts it behind the scrollview
   },
-  tree: { position: 'absolute', alignItems: 'center' },
-  treeCanopy: { marginBottom: -4 },
-  treeTrunk: {
-    width: 6,
-    height: 30,
-    backgroundColor: '#2A1A12',
-    borderTopLeftRadius: 2,
-    borderTopRightRadius: 2,
+  scene: {
+    flex: 1,
+    position: 'relative',
   },
   hill: {
     position: 'absolute',
-    bottom: -80,
-    left: '-20%',
-    right: '-20%',
+    bottom: -80, // Pushed down to create the arc
+    left: -50,
+    right: -50,
     height: 200,
     backgroundColor: RED,
-    borderTopLeftRadius: 400,
-    borderTopRightRadius: 400,
+    borderTopLeftRadius: 300,
+    borderTopRightRadius: 300,
+  },
+  tree: {
+    position: 'absolute',
+    alignItems: 'center',
+  },
+  treeTop: {
+    marginBottom: -6,
+  },
+  treeTrunk: {
+    width: 6,
+    height: 35,
+    backgroundColor: '#2A1A12',
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
   },
 });
