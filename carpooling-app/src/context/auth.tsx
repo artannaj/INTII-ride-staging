@@ -7,7 +7,6 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { router } from 'expo-router'; // <-- ADDED IMPORT
 
 import * as api from '@/lib/api';
 import { authenticate } from '@/lib/biometrics';
@@ -216,9 +215,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await Promise.all([setStoredToken(null), setStoredUserJson(null)]);
     setToken(null);
     setUser(null);
-    
-    // 🛠️ THE FIX: Force redirect to login so you never get stuck on the Home screen
-    router.replace('/login');
+    // Navigation happens in RootNavigator once the route guards have switched;
+    // navigating here would target /login while it's still locked.
   }, []);
 
   const value = useMemo(
