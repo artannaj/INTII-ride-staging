@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BrandMark } from '@/components/brand-mark';
+import { HillsScene } from '@/components/illustrations';
 import { useAuth } from '@/context/auth';
 import { ApiError } from '@/lib/api';
 import { getBiometricSupport, type BiometricSupport } from '@/lib/biometrics';
@@ -87,7 +88,7 @@ export default function LoginScreen() {
       
       {/* 🛠️ BOTTOM ILLUSTRATION IS NOW ABSOLUTE POSITIONED BEHIND THE SCROLLVIEW */}
       <View style={styles.illustrationContainer} pointerEvents="none">
-        <BottomIllustration />
+        <HillsScene />
       </View>
 
       <KeyboardAvoidingView
@@ -211,38 +212,11 @@ export default function LoginScreen() {
             </View>
 
             {/* Extra space at the bottom of the scroll so you can scroll past the illustration if needed */}
-            <View style={{ height: 180 }} />
+            <View style={{ height: 200 }} />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  );
-}
-
-function BottomIllustration() {
-  return (
-    <View style={styles.scene}>
-      {/* Hill */}
-      <View style={styles.hill} />
-
-      {/* Pink Tree (Left) */}
-      <View style={[styles.tree, { left: '5%', bottom: 20 }]}>
-        <View style={[styles.treeTop, { backgroundColor: '#D77A8A', width: 100, height: 100, borderRadius: 50 }]} />
-        <View style={styles.treeTrunk} />
-      </View>
-
-      {/* Brown/Orange Tree (Middle Right) */}
-      <View style={[styles.tree, { right: '30%', bottom: 30 }]}>
-        <View style={[styles.treeTop, { backgroundColor: '#B8651F', width: 70, height: 70, borderRadius: 35 }]} />
-        <View style={styles.treeTrunk} />
-      </View>
-
-      {/* Orange Tree (Far Right) */}
-      <View style={[styles.tree, { right: '5%', bottom: 10 }]}>
-        <View style={[styles.treeTop, { backgroundColor: '#D06B2C', width: 65, height: 65, borderRadius: 32.5 }]} />
-        <View style={styles.treeTrunk} />
-      </View>
-    </View>
   );
 }
 
@@ -390,35 +364,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 160, // Fixed height so it doesn't interfere with the layout
     zIndex: -1, // Puts it behind the scrollview
-  },
-  scene: {
-    flex: 1,
-    position: 'relative',
-  },
-  hill: {
-    position: 'absolute',
-    bottom: -80, // Pushed down to create the arc
-    left: -50,
-    right: -50,
-    height: 200,
-    backgroundColor: RED,
-    borderTopLeftRadius: 300,
-    borderTopRightRadius: 300,
-  },
-  tree: {
-    position: 'absolute',
-    alignItems: 'center',
-  },
-  treeTop: {
-    marginBottom: -6,
-  },
-  treeTrunk: {
-    width: 6,
-    height: 35,
-    backgroundColor: '#2A1A12',
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
   },
 });
