@@ -5,10 +5,10 @@ import {
   PlusJakartaSans_700Bold,
   useFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { Colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/context/auth';
@@ -40,6 +40,19 @@ function SplashController() {
 function RootNavigator() {
   const { token, isLoading } = useAuth();
   const signedIn = !!token;
+
+  // On sign-out, send the user to login. This runs after the render that flips
+  // the Stack.Protected guards, so /login is unlocked and the (app) screens are
+  // already gone; navigating from inside signOut() raced the guards and left
+  // users stuck on Home.
+  const wasSignedIn = useRef(signedIn);
+  useEffect(() => {
+    if (isLoading) return;
+    if (wasSignedIn.current && !signedIn) {
+      router.replace('/login');
+    }
+    wasSignedIn.current = signedIn;
+  }, [signedIn, isLoading]);
 
   if (isLoading) {
     return null;

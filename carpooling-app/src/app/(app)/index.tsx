@@ -42,7 +42,7 @@ export default function PassengerHomeScreen() {
   const [savedPlaces, setSavedPlaces] = useState<Place[]>([]);
   const [shareModalVisible, setShareModalVisible] = useState(false);
 
-  const displayName = user?.username || 'Wee';
+  const displayName = user?.username || 'Rider';
   const shareMessage = 'Join me on INTI Ride — use code AIMAN5 for RM5 off your first ride! inti.ride/join/AIMAN5';
 
   useFocusEffect(
