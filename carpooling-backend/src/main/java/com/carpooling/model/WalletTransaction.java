@@ -40,6 +40,10 @@ public class WalletTransaction {
     @Column(length = 50)
     private String reference;
 
+    // Set for ride payments, refunds and driver earnings
+    @Column(name = "booking_id")
+    private Long bookingId;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -82,6 +86,9 @@ public class WalletTransaction {
     public String getReference() { return reference; }
     public void setReference(String reference) { this.reference = reference; }
 
+    public Long getBookingId() { return bookingId; }
+    public void setBookingId(Long bookingId) { this.bookingId = bookingId; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
@@ -90,7 +97,8 @@ public class WalletTransaction {
         RIDE_PAYMENT,
         REFUND,
         REFERRAL_REWARD,
-        CANCELLATION_FEE
+        CANCELLATION_FEE,
+        DRIVER_EARNING
     }
 
     public enum Status {

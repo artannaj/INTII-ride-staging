@@ -33,6 +33,7 @@ public class WalletController {
             Authentication authentication,
             @RequestBody TopUpRequest request
     ) {
+        walletService.ensureWallet(authentication.getName());
         return ResponseEntity.ok(walletService.topUp(authentication.getName(), request));
     }
 

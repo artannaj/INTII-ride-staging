@@ -13,15 +13,24 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProfileService {
 
     private final UserRepository userRepository;
+    private final WalletService walletService;
 
-    public ProfileService(UserRepository userRepository) {
+    public ProfileService(UserRepository userRepository, WalletService walletService) {
         this.userRepository = userRepository;
+        this.walletService = walletService;
+    }
+
+    /** users.balance is a legacy column that is never updated; the wallet is the source of truth. */
+    private ProfileResponse toResponse(User user) {
+        ProfileResponse r = ProfileResponse.from(user);
+        r.setBalance(walletService.balanceOf(user.getId()));
+        return r;
     }
 
     @Transactional(readOnly = true)
     public ProfileResponse getProfile(String email) {
         User user = findByEmail(email);
-        return ProfileResponse.from(user);
+        return toResponse(user);
     }
 
     @Transactional
@@ -52,7 +61,7 @@ public class ProfileService {
         }
 
         userRepository.save(user);
-        return ProfileResponse.from(user);
+        return toResponse(user);
     }
 
     private User findByEmail(String email) {

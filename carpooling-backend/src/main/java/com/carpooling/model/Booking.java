@@ -29,6 +29,15 @@ public class Booking {
     @Builder.Default
     private Status status = Status.PENDING;
 
+    // Null on bookings made before payments existed; treated as cash
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", length = 10)
+    private PaymentMethod paymentMethod;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_status", length = 20)
+    private PaymentStatus paymentStatus;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -39,4 +48,9 @@ public class Booking {
     }
 
     public enum Status { PENDING, CONFIRMED, REJECTED, COMPLETED, CANCELLED }
+
+    public enum PaymentMethod { WALLET, CASH }
+
+    /** PAID = held from the passenger's wallet; PAID_OUT = credited to the driver after the trip. */
+    public enum PaymentStatus { PAID, REFUNDED, PAID_OUT, CASH_ON_PICKUP }
 }

@@ -232,7 +232,14 @@ function PassengerCard({ booking, actions }: { booking: Booking; actions?: React
         <View style={{ flex: 1 }}>
           <Text style={styles.passengerName}>{name}</Text>
           <Text style={styles.passengerSub}>
-            {booking.seatsBooked} seat{booking.seatsBooked === 1 ? '' : 's'} · RM {booking.totalPrice.toFixed(2)}
+            {booking.seatsBooked} seat{booking.seatsBooked === 1 ? '' : 's'} · RM {booking.totalPrice.toFixed(2)} ·{' '}
+            {booking.paymentStatus === 'CASH_ON_PICKUP'
+              ? 'cash at pickup'
+              : booking.paymentStatus === 'PAID_OUT'
+                ? 'paid to you'
+                : booking.paymentStatus === 'REFUNDED'
+                  ? 'refunded'
+                  : 'prepaid by wallet'}
           </Text>
         </View>
         {!actions ? (

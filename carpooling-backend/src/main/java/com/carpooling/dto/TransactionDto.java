@@ -12,6 +12,7 @@ public class TransactionDto {
     private String description;
     private String status;
     private String reference;
+    private Long bookingId;
     private LocalDateTime createdAt;
 
     public TransactionDto() {
@@ -25,6 +26,7 @@ public class TransactionDto {
         d.description = t.getDescription();
         d.status = t.getStatus() != null ? t.getStatus().name() : null;
         d.reference = t.getReference();
+        d.bookingId = t.getBookingId();
         d.createdAt = t.getCreatedAt();
         return d;
     }
@@ -46,6 +48,9 @@ public class TransactionDto {
 
     public String getReference() { return reference; }
     public void setReference(String reference) { this.reference = reference; }
+
+    public Long getBookingId() { return bookingId; }
+    public void setBookingId(Long bookingId) { this.bookingId = bookingId; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

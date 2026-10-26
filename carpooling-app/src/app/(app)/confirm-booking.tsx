@@ -1,12 +1,14 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Modal, ScrollView } from 'react-native';
-import { Star, ShieldCheck, ChevronDown, Check } from 'lucide-react-native';
+import { Star, ShieldCheck, ChevronDown, Check, Wallet as WalletIcon, Banknote } from 'lucide-react-native';
 
 import { AppHeader } from '@/components/app-header'; // <-- Use the perfect header
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
-import { getRideById, createBooking, type Ride } from '@/lib/api';
+import { getRideById, createBooking, getWallet, type BookingPaymentMethod, type Ride } from '@/lib/api';
+import { authenticate } from '@/lib/biometrics';
+import { getBiometricPayEnabled } from '@/lib/storage';
 
 export default function ConfirmBookingScreen() {
   const { rideId } = useLocalSearchParams<{ rideId: string }>();
@@ -18,6 +20,18 @@ export default function ConfirmBookingScreen() {
   const [isToday, setIsToday] = useState(false);
   const [selectedWindow, setSelectedWindow] = useState('On time');
   const [showWindowModal, setShowWindowModal] = useState(false);
+
+  const [payWith, setPayWith] = useState<BookingPaymentMethod>('WALLET');
+  const [balance, setBalance] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Refresh on focus so the balance is current after a trip to the wallet screen
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      getWallet(token).then((w) => setBalance(w.balance)).catch(() => setBalance(null));
+    }, [token])
+  );
 
   useEffect(() => {
     if (!token || !rideId) return;
@@ -33,18 +47,26 @@ export default function ConfirmBookingScreen() {
   }, [token, rideId]);
 
   const handleRequestSeat = async () => {
-    if (!token || !ride) return;
+    if (!token || !ride || submitting) return;
+    if (payWith === 'WALLET' && (await getBiometricPayEnabled())) {
+      const ok = await authenticate(`Pay RM ${ride.price.toFixed(2)} from Campus Wallet`);
+      if (!ok) return;
+    }
+    setSubmitting(true);
     try {
-      await createBooking(token, { rideId: ride.id, seatsBooked: 1 }); 
-      
+      await createBooking(token, { rideId: ride.id, seatsBooked: 1, paymentMethod: payWith });
+
       Alert.alert(
-        'Request Sent!', 
-        'Your seat request has been sent to the driver. You will be able to track them once they approve your booking.', 
+        'Request Sent!',
+        payWith === 'WALLET'
+          ? `RM ${ride.price.toFixed(2)} is held from your wallet and refunded in full if the driver declines or you cancel before the trip.`
+          : 'Your seat request has been sent. Pay the driver in cash at pickup once they approve.',
         [{ text: 'OK', onPress: () => router.replace('/(app)') }]
       );
-      
     } catch (error: any) {
       Alert.alert('Booking Failed', error.message || 'Could not book this ride.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -63,6 +85,7 @@ export default function ConfirmBookingScreen() {
   const passengerName = user?.username || 'Passenger';
 
   const TIME_WINDOWS = ['15 mins before', '10 mins before', '5 mins before', 'On time'];
+  const walletShort = balance !== null && balance < ride.price;
 
   return (
     <View style={styles.root}>
@@ -133,6 +156,42 @@ export default function ConfirmBookingScreen() {
           </View>
         )}
 
+        {/* Payment */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Payment</Text>
+          <Pressable
+            style={[styles.payOption, payWith === 'WALLET' && styles.payOptionOn]}
+            onPress={() => setPayWith('WALLET')}>
+            <WalletIcon size={20} color={payWith === 'WALLET' ? Colors.light.primary : '#6B7280'} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.payTitle}>Campus Wallet</Text>
+              <Text style={[styles.paySub, walletShort && { color: '#EF4444' }]}>
+                {balance === null
+                  ? 'Balance unavailable'
+                  : walletShort
+                    ? `Balance RM ${balance.toFixed(2)} · not enough`
+                    : `Balance RM ${balance.toFixed(2)} · refunded if not confirmed`}
+              </Text>
+            </View>
+            {payWith === 'WALLET' && <Check size={20} color={Colors.light.primary} />}
+          </Pressable>
+          {payWith === 'WALLET' && walletShort ? (
+            <Pressable onPress={() => router.push('/(app)/wallet')} style={styles.topUpLink}>
+              <Text style={styles.topUpLinkText}>Top up wallet →</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            style={[styles.payOption, payWith === 'CASH' && styles.payOptionOn]}
+            onPress={() => setPayWith('CASH')}>
+            <Banknote size={20} color={payWith === 'CASH' ? Colors.light.primary : '#6B7280'} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.payTitle}>Cash to driver</Text>
+              <Text style={styles.paySub}>Pay at pickup</Text>
+            </View>
+            {payWith === 'CASH' && <Check size={20} color={Colors.light.primary} />}
+          </Pressable>
+        </View>
+
         {/* Ride Note */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Ride Note</Text>
@@ -141,8 +200,17 @@ export default function ConfirmBookingScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable style={styles.requestBtn} onPress={handleRequestSeat}>
-          <Text style={styles.requestBtnText}>Request Seat</Text>
+        <Pressable
+          style={[styles.requestBtn, (submitting || (payWith === 'WALLET' && walletShort)) && { opacity: 0.5 }]}
+          onPress={handleRequestSeat}
+          disabled={submitting || (payWith === 'WALLET' && walletShort)}>
+          <Text style={styles.requestBtnText}>
+            {submitting
+              ? 'Requesting…'
+              : payWith === 'WALLET'
+                ? `Request Seat · Pay RM ${ride.price.toFixed(2)}`
+                : 'Request Seat · Pay cash'}
+          </Text>
         </Pressable>
       </View>
 
@@ -194,4 +262,10 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 16, textAlign: 'center' },
   windowOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   windowText: { fontSize: 16, fontWeight: '600', color: '#374151' },
+  payOption: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 14, marginBottom: 10 },
+  payOptionOn: { borderColor: Colors.light.primary, backgroundColor: Colors.light.primarySoft },
+  payTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  paySub: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  topUpLink: { alignSelf: 'flex-end', marginTop: -4, marginBottom: 10 },
+  topUpLinkText: { fontSize: 13, fontWeight: '700', color: Colors.light.primary },
 });

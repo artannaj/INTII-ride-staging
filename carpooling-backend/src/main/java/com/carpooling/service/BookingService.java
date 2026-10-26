@@ -30,11 +30,14 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final RideRepository rideRepository;
     private final UserRepository userRepository;
+    private final WalletService walletService;
 
-    public BookingService(BookingRepository bookingRepository, RideRepository rideRepository, UserRepository userRepository) {
+    public BookingService(BookingRepository bookingRepository, RideRepository rideRepository,
+                          UserRepository userRepository, WalletService walletService) {
         this.bookingRepository = bookingRepository;
         this.rideRepository = rideRepository;
         this.userRepository = userRepository;
+        this.walletService = walletService;
     }
 
     @Transactional
@@ -55,6 +58,8 @@ public class BookingService {
         if (bookingRepository.existsByRideIdAndPassengerIdAndStatusIn(ride.getId(), passenger.getId(), OPEN_BOOKINGS)) {
             throw new ApiException("You already have a booking on this ride", HttpStatus.CONFLICT.value());
         }
+
+        Booking.PaymentMethod paymentMethod = parsePaymentMethod(request.getPaymentMethod());
 
         int seats = request.getSeatsBooked() != null ? request.getSeatsBooked() : 1;
         if (seats < 1) {
@@ -79,9 +84,17 @@ public class BookingService {
                 .seatsBooked(seats)
                 .totalPrice(totalPrice)
                 .status(Booking.Status.PENDING)
+                .paymentMethod(paymentMethod)
+                .paymentStatus(paymentMethod == Booking.PaymentMethod.CASH ? Booking.PaymentStatus.CASH_ON_PICKUP : null)
                 .build();
 
         bookingRepository.save(booking);
+        // Fare is held from the wallet now and refunded if the request doesn't go ahead.
+        // Throws (and rolls back the seat hold) if the balance is too low.
+        if (paymentMethod == Booking.PaymentMethod.WALLET) {
+            walletService.chargeBooking(booking, rideLabel(ride));
+            bookingRepository.save(booking);
+        }
         return toResponse(booking, ride, null, passenger);
     }
 
@@ -131,6 +144,7 @@ public class BookingService {
         }
 
         booking.setStatus(Booking.Status.CANCELLED);
+        walletService.refundBooking(booking, "you cancelled " + rideLabel(ride));
         bookingRepository.save(booking);
         releaseSeats(ride, booking);
         return toResponse(booking, ride, null, passenger);
@@ -158,12 +172,26 @@ public class BookingService {
             throw new ApiException("Only pending requests can be rejected", HttpStatus.CONFLICT.value());
         }
         booking.setStatus(Booking.Status.REJECTED);
+        walletService.refundBooking(booking, "driver declined " + rideLabel(ride));
         bookingRepository.save(booking);
         releaseSeats(ride, booking);
         return toResponse(booking, ride, driver, null);
     }
 
     /* ---------- Helpers ---------- */
+
+    static String rideLabel(Ride ride) {
+        return ride.getOrigin() + " → " + ride.getDestination();
+    }
+
+    private static Booking.PaymentMethod parsePaymentMethod(String raw) {
+        if (raw == null || raw.isBlank()) return Booking.PaymentMethod.WALLET;
+        try {
+            return Booking.PaymentMethod.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new ApiException("Payment method must be WALLET or CASH", HttpStatus.BAD_REQUEST.value());
+        }
+    }
 
     private void releaseSeats(Ride ride, Booking booking) {
         ride.setSeatsAvailable(ride.getSeatsAvailable() + booking.getSeatsBooked());

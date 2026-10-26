@@ -1,14 +1,12 @@
 import { StatusBar } from 'expo-status-bar';
 import {
-    AlertTriangle,
     Banknote,
     CreditCard,
-    Lock,
-    Tag,
     Wallet as WalletIcon
 } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
+    Alert,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -23,7 +21,6 @@ import { AppHeader } from '@/components/app-header'; // <-- Use the perfect head
 import {
     Badge,
     Button,
-    MenuRow,
     ScreenScroll,
     SectionGroup,
     Toggle,
@@ -34,10 +31,14 @@ import {
     ApiError,
     createPaymentMethod,
     deletePaymentMethod,
+    getPreferences,
     getWallet,
     listPaymentMethods,
     setDefaultPaymentMethod,
     topUpWallet,
+    updatePreferences,
+    TOPUP_MAX,
+    TOPUP_MIN,
     type PaymentMethod,
     type Wallet,
 } from '@/lib/api';
@@ -58,16 +59,17 @@ export default function WalletScreen() {
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Biometric payments is a per-device preference stored in SecureStore.
-  // Auto top-up and alerts are still local-only UI state.
+  // Biometric payments is a per-device preference stored in SecureStore;
+  // payment alerts map to the notifyPayments preference on the server.
   const [bioPay, setBioPay] = useState(false);
   const [bioSupport, setBioSupport] = useState<BiometricSupport | null>(null);
-  const [autoTopUp, setAutoTopUp] = useState(false);
   const [alerts, setAlerts] = useState(true);
 
   // Top-up modal
   const [topupVisible, setTopupVisible] = useState(false);
   const [topupAmount, setTopupAmount] = useState(20);
+  const [customAmount, setCustomAmount] = useState('');
+  const [topupMethodId, setTopupMethodId] = useState<number | null>(null);
   const [topupBusy, setTopupBusy] = useState(false);
 
   // Add-method modal
@@ -75,18 +77,21 @@ export default function WalletScreen() {
   const [addType, setAddType] = useState<'CARD' | 'EWALLET' | 'BANK' | 'CASH'>('CARD');
   const [provider, setProvider] = useState('');
   const [accountRef, setAccountRef] = useState('');
+  const [expiry, setExpiry] = useState('');
   const [addBusy, setAddBusy] = useState(false);
 
   async function load() {
     if (!token) return;
     setError(null);
     try {
-      const [w, m] = await Promise.all([
+      const [w, m, prefs] = await Promise.all([
         getWallet(token),
         listPaymentMethods(token),
+        getPreferences(token).catch(() => null),
       ]);
       setWallet(w);
       setMethods(m);
+      if (prefs) setAlerts(prefs.notifyPayments);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load wallet.');
     }
@@ -117,8 +122,41 @@ export default function WalletScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  // Cash can't fund a top-up; default to the default method when it's eligible
+  const fundingMethods = methods.filter((m) => m.type !== 'CASH');
+  const selectedFunding =
+    fundingMethods.find((m) => m.id === topupMethodId) ??
+    fundingMethods.find((m) => m.isDefault) ??
+    fundingMethods[0] ??
+    null;
+
+  async function toggleAlerts(value: boolean) {
+    if (!token) return;
+    setAlerts(value);
+    try {
+      await updatePreferences(token, { notifyPayments: value });
+    } catch (err) {
+      setAlerts(!value);
+      setError(err instanceof ApiError ? err.message : 'Could not save.');
+    }
+  }
+
+  function chooseAmount(value: number) {
+    setTopupAmount(value);
+    setCustomAmount('');
+  }
+
   async function doTopUp() {
     if (!token) return;
+    setError(null);
+    if (!selectedFunding) {
+      setError('Add a card, e-wallet or bank account to top up from.');
+      return;
+    }
+    if (!(topupAmount >= TOPUP_MIN && topupAmount <= TOPUP_MAX)) {
+      setError(`Top up between RM ${TOPUP_MIN} and RM ${TOPUP_MAX}.`);
+      return;
+    }
     if (bioPay) {
       const ok = await authenticate(`Confirm top-up of RM ${topupAmount.toFixed(2)}`);
       if (!ok) {
@@ -128,7 +166,7 @@ export default function WalletScreen() {
     }
     setTopupBusy(true);
     try {
-      await topUpWallet(token, topupAmount, 'Campus Wallet');
+      await topUpWallet(token, topupAmount, selectedFunding.id);
       setTopupVisible(false);
       await load();
     } catch (err) {
@@ -144,16 +182,22 @@ export default function WalletScreen() {
       setError('Enter a provider name.');
       return;
     }
+    if (addType !== 'CASH' && accountRef.replace(/\D/g, '').length < 4) {
+      setError('Enter the last 4 digits of the account.');
+      return;
+    }
     setAddBusy(true);
     try {
       await createPaymentMethod(token, {
         type: addType,
         provider: provider.trim(),
-        accountRef: accountRef.trim() || undefined,
+        accountRef: addType === 'CASH' ? undefined : accountRef.trim(),
+        expiryDate: addType === 'CARD' && expiry.trim() ? expiry.trim() : undefined,
       });
       setAddVisible(false);
       setProvider('');
       setAccountRef('');
+      setExpiry('');
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not add method.');
@@ -162,14 +206,23 @@ export default function WalletScreen() {
     }
   }
 
-  async function removeMethod(id: number) {
+  function removeMethod(method: PaymentMethod) {
     if (!token) return;
-    try {
-      await deletePaymentMethod(token, id);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not remove.');
-    }
+    Alert.alert('Remove payment method?', `${method.provider} ${method.accountRef ?? ''}`.trim(), [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deletePaymentMethod(token, method.id);
+            await load();
+          } catch (err) {
+            setError(err instanceof ApiError ? err.message : 'Could not remove.');
+          }
+        },
+      },
+    ]);
   }
 
   async function makeDefault(id: number) {
@@ -197,7 +250,12 @@ export default function WalletScreen() {
           <View style={styles.balanceCard}>
             <View style={styles.balanceHead}>
               <Text style={styles.balanceLabel}>Campus Wallet balance</Text>
-              <Pressable onPress={() => setTopupVisible(true)} style={styles.topupBtn}>
+              <Pressable
+                onPress={() => {
+                  setError(null);
+                  setTopupVisible(true);
+                }}
+                style={styles.topupBtn}>
                 <Text style={styles.topupText}>Top up</Text>
               </Pressable>
             </View>
@@ -205,6 +263,11 @@ export default function WalletScreen() {
             <Text style={styles.balanceSub}>
               Used for ride fares when selected at checkout
             </Text>
+            {wallet && wallet.totalEarned > 0 ? (
+              <Text style={styles.balanceSub}>
+                Earned from driving: RM {wallet.totalEarned.toFixed(2)}
+              </Text>
+            ) : null}
           </View>
 
           {/* Payment methods */}
@@ -214,7 +277,7 @@ export default function WalletScreen() {
               return (
                 <Pressable
                   key={m.id}
-                  onLongPress={() => removeMethod(m.id)}
+                  onLongPress={() => removeMethod(m)}
                   onPress={() => {
                     if (!m.isDefault) makeDefault(m.id);
                   }}
@@ -236,49 +299,40 @@ export default function WalletScreen() {
             })}
 
             <Pressable
-              onPress={() => setAddVisible(true)}
+              onPress={() => {
+                setError(null);
+                setAddVisible(true);
+              }}
               style={styles.addMethodRow}>
               <Text style={styles.addMethodText}>+ Add payment method</Text>
               <Text style={styles.addMethodSub}>
-                Card, e-wallet or online banking
+                Card, e-wallet or online banking · long-press a method to remove it
               </Text>
             </Pressable>
           </SectionGroup>
 
           {/* Security & preferences */}
           <SectionGroup title="Security & preferences">
-            <MenuRow Icon={Lock} title="Reset payment PIN" onPress={() => {}} />
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>
                 {bioSupport?.available ? `${bioSupport.label} for payments` : 'Biometric payments'}
               </Text>
               <Toggle value={bioPay} onChange={toggleBioPay} />
             </View>
-            <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Auto top-up</Text>
-              <Toggle value={autoTopUp} onChange={setAutoTopUp} />
-            </View>
             <View style={[styles.toggleRow, styles.toggleLast]}>
               <Text style={styles.toggleLabel}>Payment alerts</Text>
-              <Toggle value={alerts} onChange={setAlerts} />
+              <Toggle value={alerts} onChange={toggleAlerts} />
             </View>
           </SectionGroup>
 
-          {/* Fees */}
-          <SectionGroup title="Fees">
-            <MenuRow
-              Icon={AlertTriangle}
-              title="Late cancellation fee"
-              subtitle="RM 3.00 · applies if cancelled after arrival"
-              onPress={() => {}}
-            />
-            <MenuRow
-              Icon={Tag}
-              title="Promo codes"
-              subtitle="Apply codes at checkout"
-              onPress={() => {}}
-              last
-            />
+          {/* How ride payments work */}
+          <SectionGroup title="How ride payments work">
+            <Text style={styles.infoText}>
+              When you request a seat with Campus Wallet, the fare is held from your balance.
+              It's refunded in full if the driver declines or cancels, or if you cancel before
+              the trip starts. The driver receives it when the trip ends. You can also choose
+              to pay the driver in cash at pickup.
+            </Text>
           </SectionGroup>
 
           {/* Transactions */}
@@ -329,11 +383,11 @@ export default function WalletScreen() {
 
             <View style={styles.amountGrid}>
               {[10, 20, 50, 100].map((a) => {
-                const on = a === topupAmount;
+                const on = a === topupAmount && !customAmount;
                 return (
                   <Pressable
                     key={a}
-                    onPress={() => setTopupAmount(a)}
+                    onPress={() => chooseAmount(a)}
                     style={[styles.amountBtn, on && styles.amountBtnOn]}>
                     <Text style={[styles.amountText, on && styles.amountTextOn]}>
                       RM {a}
@@ -343,10 +397,64 @@ export default function WalletScreen() {
               })}
             </View>
 
+            <View>
+              <Text style={styles.label}>Or enter an amount (RM {TOPUP_MIN}–{TOPUP_MAX})</Text>
+              <TextInput
+                value={customAmount}
+                onChangeText={(t) => {
+                  const clean = t.replace(/[^0-9.]/g, '');
+                  setCustomAmount(clean);
+                  const n = Number(clean);
+                  if (clean && !Number.isNaN(n)) setTopupAmount(Math.round(n * 100) / 100);
+                }}
+                placeholder="e.g. 15"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="decimal-pad"
+                style={styles.input}
+              />
+            </View>
+
+            <View>
+              <Text style={styles.label}>Pay from</Text>
+              {fundingMethods.length === 0 ? (
+                <Pressable
+                  onPress={() => {
+                    setTopupVisible(false);
+                    setAddVisible(true);
+                  }}
+                  style={styles.fundingEmpty}>
+                  <Text style={styles.addMethodText}>+ Add a card, e-wallet or bank first</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.fundingList}>
+                  {fundingMethods.map((m) => {
+                    const on = m.id === selectedFunding?.id;
+                    return (
+                      <Pressable
+                        key={m.id}
+                        onPress={() => setTopupMethodId(m.id)}
+                        style={[styles.fundingRow, on && styles.fundingRowOn]}>
+                        <Text style={[styles.fundingText, on && styles.fundingTextOn]} numberOfLines={1}>
+                          {m.provider}{m.accountRef ? ` ${m.accountRef}` : ''}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
+            <Text style={styles.simNote}>
+              Demo mode: top-ups are simulated and no real money is charged.
+            </Text>
+
+            {error && topupVisible ? <Text style={styles.error}>{error}</Text> : null}
+
             <Button
               label={`Add RM ${topupAmount.toFixed(2)}`}
               onPress={doTopUp}
               loading={topupBusy}
+              disabled={!selectedFunding}
             />
             <Pressable
               onPress={() => setTopupVisible(false)}
@@ -394,16 +502,43 @@ export default function WalletScreen() {
               />
             </View>
 
-            <View>
-              <Text style={styles.label}>Account reference</Text>
-              <TextInput
-                value={accountRef}
-                onChangeText={setAccountRef}
-                placeholder="•••• 4821 or linked account"
-                placeholderTextColor="#9CA3AF"
-                style={styles.input}
-              />
-            </View>
+            {addType !== 'CASH' ? (
+              <View>
+                <Text style={styles.label}>
+                  {addType === 'EWALLET' ? 'Last 4 digits of linked phone' : 'Last 4 digits'}
+                </Text>
+                <TextInput
+                  value={accountRef}
+                  onChangeText={(t) => setAccountRef(t.replace(/\D/g, '').slice(-4))}
+                  placeholder="4821"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  style={styles.input}
+                />
+                <Text style={styles.simNote}>We only store the last 4 digits, never the full number.</Text>
+              </View>
+            ) : null}
+
+            {addType === 'CARD' ? (
+              <View>
+                <Text style={styles.label}>Expiry (MM/YY)</Text>
+                <TextInput
+                  value={expiry}
+                  onChangeText={(t) => {
+                    const d = t.replace(/\D/g, '').slice(0, 4);
+                    setExpiry(d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d);
+                  }}
+                  placeholder="08/28"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="number-pad"
+                  maxLength={5}
+                  style={styles.input}
+                />
+              </View>
+            ) : null}
+
+            {error && addVisible ? <Text style={styles.error}>{error}</Text> : null}
 
             <Button label="Add method" onPress={addMethod} loading={addBusy} />
             <Pressable onPress={() => setAddVisible(false)} style={styles.cancelRow}>
@@ -418,6 +553,14 @@ export default function WalletScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.light.background },
+  infoText: { fontSize: 13, lineHeight: 19, color: Colors.light.textSecondary, padding: 16 },
+  simNote: { fontSize: 11, color: '#9CA3AF', marginTop: 4 },
+  fundingList: { gap: 8 },
+  fundingEmpty: { paddingVertical: 12 },
+  fundingRow: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  fundingRowOn: { borderColor: Colors.light.primary, backgroundColor: Colors.light.primarySoft },
+  fundingText: { fontSize: 14, fontWeight: '600', color: Colors.light.text },
+  fundingTextOn: { color: Colors.light.primary },
   flex: { flex: 1 },
 
   // balance card

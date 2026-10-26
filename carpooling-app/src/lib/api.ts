@@ -290,6 +290,7 @@ export type Transaction = {
   status: string;
   reference: string;
   createdAt: string;
+  bookingId: number | null;
 };
 
 export type Wallet = {
@@ -297,21 +298,28 @@ export type Wallet = {
   autoTopupEnabled: boolean;
   autoTopupThreshold: number;
   autoTopupAmount: number;
+  /** Sum of DRIVER_EARNING credits (0 for passengers). */
+  totalEarned: number;
   transactions: Transaction[];
 };
+
+/** Mirrors WalletService limits on the backend. */
+export const TOPUP_MIN = 1;
+export const TOPUP_MAX = 500;
 
 export function getWallet(token: string): Promise<Wallet> {
   return request<Wallet>('/api/wallet', {}, token);
 }
 
+/** Simulated top-up: no real card is charged. */
 export function topUpWallet(
   token: string,
   amount: number,
-  paymentMethod: string
+  paymentMethodId: number
 ): Promise<Wallet> {
   return request<Wallet>('/api/wallet/topup', {
     method: 'POST',
-    body: JSON.stringify({ amount, paymentMethod }),
+    body: JSON.stringify({ amount, paymentMethodId }),
   }, token);
 }
 
@@ -536,6 +544,9 @@ export type Booking = {
   totalPrice: number;
   status: BookingStatus;
   createdAt: string;
+  paymentMethod: 'WALLET' | 'CASH';
+  /** PAID = held from wallet, PAID_OUT = sent to driver after the trip. */
+  paymentStatus: 'PAID' | 'REFUNDED' | 'PAID_OUT' | 'CASH_ON_PICKUP';
   origin: string | null;
   destination: string | null;
   departureTime: string | null;
@@ -548,9 +559,12 @@ export type Booking = {
   passengerPhone: string | null;
 };
 
+export type BookingPaymentMethod = 'WALLET' | 'CASH';
+
+/** WALLET bookings are charged on request and refunded if they don't go ahead. */
 export function createBooking(
   token: string,
-  payload: { rideId: number; seatsBooked: number }
+  payload: { rideId: number; seatsBooked: number; paymentMethod?: BookingPaymentMethod }
 ): Promise<Booking> {
   return request<Booking>('/api/bookings', {
     method: 'POST',

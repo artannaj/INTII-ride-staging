@@ -10,7 +10,7 @@ import { BottomNav } from '@/components/bottom-nav';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { usePolling } from '@/hooks/use-polling';
-import { ApiError, getMyRides, type Ride } from '@/lib/api';
+import { ApiError, getMyRides, getWallet, type Ride } from '@/lib/api';
 import { RIDE_STATUS, formatDay, formatTime } from '@/lib/status';
 
 export default function DriverHomeScreen() {
@@ -19,11 +19,17 @@ export default function DriverHomeScreen() {
   const [rides, setRides] = useState<Ride[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [earned, setEarned] = useState<number | null>(null);
 
   async function load() {
     if (!token) return;
     try {
-      setRides(await getMyRides(token));
+      const [myRides, wallet] = await Promise.all([
+        getMyRides(token),
+        getWallet(token).catch(() => null),
+      ]);
+      setRides(myRides);
+      setEarned(wallet ? wallet.totalEarned : null);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load your rides.');
@@ -97,6 +103,16 @@ export default function DriverHomeScreen() {
           </Pressable>
         ) : null}
 
+        <Pressable style={styles.earnCard} onPress={() => router.push('/(app)/wallet')}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.earnLabel}>Total earned (Campus Wallet)</Text>
+            <Text style={styles.earnValue}>{earned !== null ? `RM ${earned.toFixed(2)}` : '—'}</Text>
+          </View>
+          <Text style={styles.earnSub}>
+            {(rides ?? []).filter((r) => r.status === 'COMPLETED').length} trips completed
+          </Text>
+        </Pressable>
+
         <Pressable style={styles.postBtn} onPress={() => router.push('/(app)/driver/post-ride')}>
           <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
           <Text style={styles.postText}>Post a ride</Text>
@@ -169,6 +185,10 @@ function RideRow({ ride, compact = false }: { ride: Ride; compact?: boolean }) {
 }
 
 const styles = StyleSheet.create({
+  earnCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  earnLabel: { fontSize: 12, color: '#6B7280', fontWeight: '600' },
+  earnValue: { fontSize: 22, fontWeight: '800', color: Colors.light.text, marginTop: 2 },
+  earnSub: { fontSize: 12, color: '#6B7280', fontWeight: '600' },
   root: { flex: 1, backgroundColor: '#E0E0E0' },
   header: { backgroundColor: Colors.light.primary, paddingHorizontal: 20, paddingBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
   greeting: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
