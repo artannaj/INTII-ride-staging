@@ -7,6 +7,7 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
+import { router } from 'expo-router'; // <-- ADDED IMPORT
 
 import * as api from '@/lib/api';
 import { authenticate } from '@/lib/biometrics';
@@ -32,9 +33,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   token: string | null;
   isLoading: boolean;
-  /** True when this device holds a biometric-unlockable session. */
   biometricLoginEnabled: boolean;
-  /** Email of the account biometric login would sign into, for the login screen. */
   biometricEmail: string | null;
   signIn: (payload: LoginPayload) => Promise<void>;
   signInWithBiometrics: () => Promise<void>;
@@ -82,9 +81,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
           getStoredUserJson(),
           getBiometricSession(),
         ]);
+        
         if (!active) return;
-        setToken(storedToken);
-        setUser(storedUser ? (JSON.parse(storedUser) as AuthUser) : null);
+
+        // 🛠️ GHOST SESSION FIX: If token exists but user data is missing, wipe it
+        if (storedToken && !storedUser) {
+          await setStoredToken(null);
+          setToken(null);
+          setUser(null);
+        } else {
+          setToken(storedToken);
+          setUser(storedUser ? (JSON.parse(storedUser) as AuthUser) : null);
+        }
+        
         setBiometricEmail(bioSession ? (JSON.parse(bioSession.userJson) as AuthUser).email : null);
       } finally {
         if (active) setIsLoading(false);
@@ -110,8 +119,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const nextUser = toUser(response);
       await saveSession(response.token, nextUser);
 
-      // Keep the biometric copy fresh so it doesn't expire before the main one.
-      // A different account signing in on this device turns biometric login off.
       const bio = await getBiometricSession();
       if (bio) {
         const bioUser = JSON.parse(bio.userJson) as AuthUser;
@@ -144,7 +151,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
       throw new Error('Biometric check was cancelled or not recognised.');
     }
 
-    // Confirm the saved session is still valid before using it
     let current: AuthUser;
     try {
       current = await api.getCurrentUser(bio.token);
@@ -169,7 +175,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     await setBiometricSession({ token, userJson: JSON.stringify(user) });
     setBiometricEmail(user.email);
-    // Best effort: the server flag is informational, the device copy is what matters
     api.updateSettings(token, { biometricEnabled: true }).catch(() => {});
     return true;
   }, [token, user]);
@@ -208,10 +213,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
   );
 
   const signOut = useCallback(async () => {
-    // The biometric copy is intentionally kept so the user can unlock again
     await Promise.all([setStoredToken(null), setStoredUserJson(null)]);
     setToken(null);
     setUser(null);
+    
+    // 🛠️ THE FIX: Force redirect to login so you never get stuck on the Home screen
+    router.replace('/login');
   }, []);
 
   const value = useMemo(
